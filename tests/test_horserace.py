@@ -12,7 +12,7 @@ import tempfile
 import time
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
@@ -327,6 +327,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             await consume(self.service.start(self.owner))
         self.assertEqual(room.race.start, 0)
         self.assertIsNone(room.task)
+        self.assertIsNotNone(room.idle_task)
 
     async def test_reset_cancels_running_task(self):
         room = await self.ready()
@@ -346,6 +347,114 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         new = self.service.rooms[key]
         await self.service._run(self.owner, key, old, self.service.events)
         self.assertIs(self.service.rooms[key], new)
+
+    async def test_empty_lobby_expires_after_sixty_seconds(self):
+        await consume(self.service.create(self.owner))
+        room = self.service._room(self.owner)
+        room.last_join_at -= 61
+        await asyncio.wait_for(room.idle_task, timeout=1)
+        self.assertFalse(self.service.rooms)
+        self.assertIn("自动清空", self.owner.messages[-1])
+
+    async def test_successful_join_refreshes_deadline(self):
+        await consume(self.service.create(self.owner))
+        room = self.service._room(self.owner)
+        timer = room.idle_task
+        room.last_join_at -= 59
+        await consume(self.service.join(self.owner))
+        self.assertLess(time.monotonic() - room.last_join_at, 1)
+        self.assertIs(room.idle_task, timer)
+        last_join = room.last_join_at
+        await consume(self.service.join(self.owner))  # duplicate
+        await consume(self.service.join(Event(user="2", text="赛马加入")))
+        await consume(self.service.status(self.owner))
+        self.assertEqual(room.last_join_at, last_join)
+        room.last_join_at -= 61
+        await asyncio.wait_for(timer, timeout=1)
+        self.assertFalse(self.service.rooms)
+
+    async def test_sleeping_timer_rechecks_extended_deadline(self):
+        await consume(self.service.create(self.owner))
+        room = self.service._room(self.owner)
+        await self.service._cancel_idle(room)
+        room.last_join_at = 0
+
+        async def simulate_join(delay):
+            if delay == 60:
+                room.last_join_at = 50
+
+        with patch(f"{PKG}.service.time") as clock, patch(
+            f"{PKG}.service.asyncio.sleep", new=AsyncMock(side_effect=simulate_join)
+        ) as sleep:
+            clock.monotonic.side_effect = [0, 61, 111]
+            await self.service._watch_idle(self.owner, self.service._key(self.owner), room)
+        self.assertEqual([c.args[0] for c in sleep.await_args_list], [60, 49])
+        self.assertFalse(self.service.rooms)
+
+    async def test_started_and_paused_race_ignore_lobby_timeout(self):
+        room = await self.ready()
+        room.race.settings = replace(room.race.settings, max_rounds=100)
+        timer = room.idle_task
+        await consume(self.service.start(self.owner))
+        self.assertTrue(timer.done())
+        self.assertIsNone(room.idle_task)
+        room.last_join_at -= 61
+        await self.service._watch_idle(self.owner, self.service._key(self.owner), room)
+        self.assertIs(self.service._room(self.owner), room)
+        await consume(self.service.pause(Event(admin=True)))
+        await self.service._watch_idle(self.owner, self.service._key(self.owner), room)
+        self.assertIs(self.service._room(self.owner), room)
+
+    async def test_clear_reset_and_unload_cancel_lobby_timer(self):
+        for action in (self.service.clear, self.service.reset, None):
+            await consume(self.service.create(self.owner))
+            room = self.service._room(self.owner)
+            timer = room.idle_task
+            room.race.time -= 1000
+            if action:
+                await consume(action(self.owner))
+            else:
+                await self.service.terminate()
+            self.assertTrue(timer.done())
+            self.assertFalse(self.service.rooms)
+        self.assertFalse(self.owner.messages)
+
+    async def test_old_lobby_timer_cannot_remove_new_room(self):
+        await consume(self.service.create(self.owner))
+        old = self.service._room(self.owner)
+        await self.service._cancel_idle(old)
+        self.service.rooms.pop(self.service._key(self.owner))
+        await consume(self.service.create(self.owner))
+        new = self.service._room(self.owner)
+        old.last_join_at -= 61
+        await self.service._watch_idle(self.owner, self.service._key(self.owner), old)
+        self.assertIs(self.service._room(self.owner), new)
+        self.assertFalse(self.owner.messages)
+
+    async def test_timeout_notification_failure_still_releases_room(self):
+        await consume(self.service.create(self.owner))
+        room = self.service._room(self.owner)
+        room.last_join_at -= 61
+        self.owner.fail = True
+        with self.assertLogs("test.astrbot", level="ERROR"):
+            await asyncio.wait_for(room.idle_task, timeout=1)
+        self.assertFalse(self.service.rooms)
+
+    async def test_unload_cancels_notification_after_room_removed(self):
+        await consume(self.service.create(self.owner))
+        room = self.service._room(self.owner)
+        room.last_join_at -= 61
+        sending = asyncio.Event()
+        async def blocked_send(result):
+            sending.set()
+            await asyncio.Future()
+        self.owner.send = blocked_send
+        timer = room.idle_task
+        await asyncio.wait_for(sending.wait(), timeout=1)
+        self.assertFalse(self.service.rooms)
+        await self.service.terminate()
+        self.assertTrue(timer.done())
+        self.assertFalse(self.service.idle_tasks)
 
 
 if __name__ == "__main__":

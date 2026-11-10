@@ -1,7 +1,7 @@
 name: astrbot_plugin_horserace
 display_name: 随机事件赛马
 desc: 多人赛马小游戏，支持随机事件、状态效果、自定义事件包和异步赛况播报。
-version: v1.0.0
+version: v1.0.1
 author: Cvandia（AstrBot 移植）；decade、冥乐、shinianj（上游）
 repo: https://github.com/Cvandia/astrbot_plugin_horserace
 astrbot_version: ">=4.16,<5"

@@ -2,6 +2,10 @@
 
 # astrbot_plugin_horserace
 
+<a href="https://github.com/Cvandia/astrbot_plugin_horserace">
+  <img src="https://count.getloli.com/@astrbot_plugin_horserace?theme=booru-lewd" alt="像素人物访问计数器" />
+</a>
+
 _⭐ 基于 AstrBot 的多人随机事件赛马小游戏 ⭐_
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
@@ -21,8 +25,11 @@ _⭐ 基于 AstrBot 的多人随机事件赛马小游戏 ⭐_
 
 本插件由 [nonebot_plugin_horserace](https://github.com/shinianj/nonebot_plugin_horserace) 移植而来，保留 **9 个事件包、103 条顶层事件**，使用 AstrBot 的平台无关消息接口和异步比赛任务。`main.py` 仅负责插件入口、生命周期和指令注册，业务逻辑独立拆分。
 
+> [!WARNING]
+> **该插件可能存在刷屏，请注意。** 比赛会逐回合播报赛况，建议在合适的群聊中使用，并按需调整回合间隔。
+
 > [!NOTE]
-> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。已通过 31 项本地测试，真实 AstrBot 群聊联调尚待完成。
+> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。已通过 39 项本地测试，真实 AstrBot 群聊联调尚待完成。
 
 ## 📜 免责声明
 
@@ -102,6 +109,8 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 
 同一平台实例下的同一群共享比赛，跨群、跨平台实例互相隔离。同回合到达终点者并列获胜。管理员指 AstrBot 管理员，群主/群管理身份不会自动获得插件管理权限。
 
+**报名超时清场：** 创建后开始计时，每次成功加入重新计时。尚未开赛且连续 **60 秒** 无人成功加入时，自动清空场地并通知群聊。无效或重复报名、查询状态不刷新计时；已开赛和暂停中的比赛不受此规则影响。
+
 ### 自定义事件包
 
 将 UTF-8 JSON 文件放入 `data/plugin_data/astrbot_plugin_horserace/events/`，发送 `赛马事件重载`：
@@ -123,8 +132,9 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 
 - [x] AstrBot 原生指令、配置和管理员权限
 - [x] 多群独立比赛、异步播报、暂停与恢复
+- [x] 报名阶段 60 秒无人加入自动清场
 - [x] 保留原事件包和自定义事件格式
-- [x] 31 项本地测试及自动化测试工作流
+- [x] 39 项本地测试及自动化测试工作流
 - [ ] 真实 AstrBot 群聊联调与各平台兼容性验收
 
 **喜欢记得点个 star ⭐**
