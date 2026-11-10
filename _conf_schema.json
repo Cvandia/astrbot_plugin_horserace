@@ -1,0 +1,62 @@
+{
+  "setting_track_length": {
+    "type": "int",
+    "description": "跑道长度",
+    "default": 20
+  },
+  "setting_random_min_length": {
+    "type": "int",
+    "description": "随机位置最小值",
+    "default": 0
+  },
+  "setting_random_max_length": {
+    "type": "int",
+    "description": "随机位置最大值",
+    "default": 15
+  },
+  "base_move_min": {
+    "type": "int",
+    "description": "基础移动最小值",
+    "default": 1
+  },
+  "base_move_max": {
+    "type": "int",
+    "description": "基础移动最大值",
+    "default": 3
+  },
+  "max_player": {
+    "type": "int",
+    "description": "最多玩家数",
+    "default": 8
+  },
+  "min_player": {
+    "type": "int",
+    "description": "最少玩家数",
+    "default": 2
+  },
+  "setting_over_time": {
+    "type": "int",
+    "description": "允许重置的等待秒数",
+    "default": 120
+  },
+  "event_rate": {
+    "type": "int",
+    "description": "事件概率（千分比）",
+    "default": 450
+  },
+  "round_interval": {
+    "type": "float",
+    "description": "回合间隔（秒）",
+    "default": 6.0
+  },
+  "max_rounds": {
+    "type": "int",
+    "description": "回合上限",
+    "default": 100
+  },
+  "image_mode": {
+    "type": "bool",
+    "description": "图片播报（需要 AstrBot 渲染服务）",
+    "default": false
+  }
+}
