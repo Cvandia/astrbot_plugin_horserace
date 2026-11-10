@@ -1,6 +1,6 @@
 """Room management, command behavior and async race lifecycle."""
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import time
 
@@ -12,11 +12,16 @@ from .race_group import race_group
 from .settings import Settings
 
 
+LOBBY_IDLE_SECONDS = 60
+
+
 @dataclass
 class Room:
     race: race_group
     owner: str
     task: asyncio.Task | None = None
+    last_join_at: float = field(default_factory=time.monotonic)
+    idle_task: asyncio.Task | None = None
 
 
 class RaceService:
@@ -30,6 +35,7 @@ class RaceService:
         self.builtin_dir = Path(__file__).parent / "events"
         self.loaded = False
         self.load_lock = asyncio.Lock()
+        self.idle_tasks: set[asyncio.Task] = set()
 
     async def initialize(self) -> None:
         await self._load()
@@ -56,10 +62,42 @@ class RaceService:
         return " ".join(value.split())[:24]
 
     async def _cancel(self, room: Room) -> None:
+        await self._cancel_idle(room)
         if room.task and not room.task.done():
             room.task.cancel()
             await asyncio.gather(room.task, return_exceptions=True)
         room.task = None
+
+    async def _cancel_idle(self, room: Room) -> None:
+        if room.idle_task and not room.idle_task.done():
+            room.idle_task.cancel()
+            await asyncio.gather(room.idle_task, return_exceptions=True)
+        room.idle_task = None
+
+    def _arm_idle(self, event: AstrMessageEvent, room: Room) -> None:
+        task = asyncio.create_task(self._watch_idle(event, self._key(event), room))
+        room.idle_task = task
+        self.idle_tasks.add(task)
+        task.add_done_callback(self.idle_tasks.discard)
+
+    async def _watch_idle(self, event: AstrMessageEvent, key: tuple[str, str], room: Room) -> None:
+        try:
+            while self.rooms.get(key) is room and room.race.start == 0:
+                remaining = LOBBY_IDLE_SECONDS - (time.monotonic() - room.last_join_at)
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                    continue  # Successful joins may have extended the deadline.
+                self.rooms.pop(key, None)
+                try:
+                    await asyncio.wait_for(event.send(event.plain_result(
+                        "连续 60 秒无人加入，报名场地已自动清空。发送 赛马创建 可重新开场。"
+                    )), timeout=10)
+                except Exception:
+                    logger.exception("[horserace] 场地已自动清空，但通知发送失败")
+                return
+        finally:
+            if room.idle_task is asyncio.current_task():
+                room.idle_task = None
 
     async def help(self, event: AstrMessageEvent):
         """显示赛马指令。"""
@@ -83,8 +121,10 @@ class RaceService:
         if key in self.rooms:
             yield event.plain_result("本群已有赛马，请加入或查看赛马状态；超时可发送 赛马重置。")
             return
-        self.rooms[key] = Room(race_group(settings), str(event.get_sender_id()))
-        yield event.plain_result("赛马创建成功！发送 赛马加入 马名 报名。")
+        room = Room(race_group(settings), str(event.get_sender_id()))
+        self.rooms[key] = room
+        self._arm_idle(event, room)
+        yield event.plain_result("赛马创建成功！发送 赛马加入 马名 报名。连续 60 秒无人加入将自动清场。")
 
     async def join(self, event: AstrMessageEvent):
         """报名赛马，命令后跟马名，可含空格。"""
@@ -104,6 +144,7 @@ class RaceService:
             reply = "赛马场已满。"
         else:
             room.race.add_player(name, str(event.get_sender_id()), self._clean_name(event.get_sender_name()) or str(event.get_sender_id()))
+            room.last_join_at = time.monotonic()
             reply = f"{name} 加入成功！{room.race.query_of_player()}/{room.race.settings.max_player} 人"
         yield event.plain_result(reply)
 
@@ -121,11 +162,14 @@ class RaceService:
         else:
             room.race.start = 1
             room.race.time = time.time()
+            await self._cancel_idle(room)
             # Reserve running state before yielding, launch only after acknowledgement.
             try:
                 await event.send(event.plain_result("比赛开始！"))
             except Exception:
                 room.race.start = 2 if room.race.round else 0
+                if room.race.start == 0 and self._room(event) is room:
+                    self._arm_idle(event, room)
                 raise
             if self.rooms.get(self._key(event)) is room and room.race.start == 1:
                 room.task = asyncio.create_task(self._run(event, self._key(event), room, self.events))
@@ -236,3 +280,9 @@ class RaceService:
         rooms = list(self.rooms.values())
         self.rooms.clear()
         await asyncio.gather(*(self._cancel(room) for room in rooms))
+        # Includes timeout notifications already sending after their room was removed.
+        tasks = list(self.idle_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.idle_tasks.clear()
