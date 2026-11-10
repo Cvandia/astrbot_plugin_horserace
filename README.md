@@ -157,6 +157,8 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 
 ## 📚 更多帮助
 
+更新记录：[CHANGELOG.md](CHANGELOG.md)。
+
 1. 开发结构、规则边界和测试说明：[开发说明](docs/开发说明.md)。
 2. 自定义事件：[事件添加相关](docs/事件添加相关.txt)、[事件详细模板](docs/事件详细模板.txt)。
 3. 反馈问题：[提交 Issue](https://github.com/Cvandia/astrbot_plugin_horserace/issues)。请提供 AstrBot 版本、平台、指令步骤和脱敏日志。
