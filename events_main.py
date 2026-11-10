@@ -1,7 +1,6 @@
 import random
 from .horse import horse
-import logging
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 def event_main(race, horse_i, event, event_delay_key = 0):
     event_name = event.get("event_name", "未知事件")
