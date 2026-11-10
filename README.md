@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./logo.png" width="128" height="128" alt="赛马插件 Logo" />
+
 # astrbot_plugin_horserace
 
 <a href="https://github.com/Cvandia/astrbot_plugin_horserace">
