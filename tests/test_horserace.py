@@ -4,7 +4,6 @@ import ast
 from dataclasses import replace
 import importlib
 import json
-import logging
 from pathlib import Path
 import random
 import sys
@@ -12,26 +11,25 @@ import tempfile
 import time
 import types
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent))
 PKG = ROOT.name
-Settings = importlib.import_module(f"{PKG}.settings").Settings
-race_group = importlib.import_module(f"{PKG}.race_group").race_group
-event_main = importlib.import_module(f"{PKG}.events_main").event_main
-deal = importlib.import_module(f"{PKG}.start").deal
-load_events = importlib.import_module(f"{PKG}.event_loader").load_events
-
 # Explicit doubles: no claim that these tests launch the AstrBot runtime.
 api = types.ModuleType("astrbot.api")
 api.AstrBotConfig = dict
-api.logger = logging.getLogger("test.astrbot")
+api.logger = Mock(spec=("info", "warning", "exception"))
 event_api = types.ModuleType("astrbot.api.event")
 event_api.AstrMessageEvent = object
 sys.modules["astrbot"] = types.ModuleType("astrbot")
 sys.modules["astrbot.api"] = api
 sys.modules["astrbot.api.event"] = event_api
+Settings = importlib.import_module(f"{PKG}.settings").Settings
+race_group = importlib.import_module(f"{PKG}.race_group").race_group
+event_main = importlib.import_module(f"{PKG}.events_main").event_main
+deal = importlib.import_module(f"{PKG}.start").deal
+load_events = importlib.import_module(f"{PKG}.event_loader").load_events
 RaceService = importlib.import_module(f"{PKG}.service").RaceService
 
 
@@ -68,6 +66,24 @@ def make_race(settings=None):
 
 
 class EngineTests(unittest.TestCase):
+    def test_plugin_loggers_use_astrbot_api(self):
+        for module_name in ("events_main", "service"):
+            module = importlib.import_module(f"{PKG}.{module_name}")
+            self.assertIs(module.logger, api.logger)
+        for path in ROOT.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    self.assertFalse(any(a.name.split(".")[0] in {"logging", "loguru"} for a in node.names), str(path))
+                elif isinstance(node, ast.ImportFrom):
+                    self.assertNotIn((node.module or "").split(".")[0], {"logging", "loguru"}, str(path))
+
+    def test_engine_error_uses_astrbot_exception_logger(self):
+        with patch.object(api.logger, "exception") as log:
+            result = event_main(make_race(), 0, {"target": 0})
+        log.assert_called_once()
+        self.assertIn("执行故障", result)
+
     def test_all_bundled_packs_and_reload(self):
         a, logs = load_events(ROOT / "events", Path("missing-custom-folder"))
         b, _ = load_events(ROOT / "events", Path("missing-custom-folder"))
@@ -308,8 +324,9 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         room = await self.ready()
         await consume(self.service.start(self.owner))
         self.owner.fail = True
-        with self.assertLogs("test.astrbot", level="ERROR"):
+        with patch.object(api.logger, "exception") as log:
             await room.task
+        self.assertTrue(log.called)
         self.assertFalse(self.service.rooms)
 
     async def test_unload_cancels_active_tasks(self):
@@ -436,8 +453,9 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         room = self.service._room(self.owner)
         room.last_join_at -= 61
         self.owner.fail = True
-        with self.assertLogs("test.astrbot", level="ERROR"):
+        with patch.object(api.logger, "exception") as log:
             await asyncio.wait_for(room.idle_task, timeout=1)
+        log.assert_called_once()
         self.assertFalse(self.service.rooms)
 
     async def test_unload_cancels_notification_after_room_removed(self):
