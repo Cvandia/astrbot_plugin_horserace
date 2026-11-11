@@ -62,16 +62,28 @@ class MinecraftTests(unittest.TestCase):
         self.race.move()
         self.assertEqual(self.horse.location, before + 1)
 
-    def test_raid_retires_immediately_without_finishing(self):
+    def test_raid_dies_immediately_and_leaves_next_round(self):
         self.horse.location = 19
         self.horse.location_add_move = 3
         self.trigger(2)
         self.assertTrue(self.horse.is_die())
-        self.assertTrue(self.horse.is_away())
+        self.assertFalse(self.horse.is_away())
         self.race.move()
         self.assertEqual(self.horse.location, 19)
         self.assertNotIn("alice", self.race.is_win_all())
         self.assertEqual(self.trigger(0), "")
+        self.race.round_add()
+        self.assertTrue(self.horse.is_away())
+
+    def test_away_always_starts_next_round_even_with_immediate_flag(self):
+        event_main(self.race, 0, deal({"target": 0, "away": 1, "immediate": 1}))
+        self.assertFalse(self.horse.is_away())
+        self.race.move()
+        self.assertEqual(self.horse.location, 1)
+        self.race.round_add()
+        self.assertTrue(self.horse.is_away())
+        self.race.move()
+        self.assertEqual(self.horse.location, 1)
 
     def test_totem_blocks_raid_and_stun(self):
         self.grant_totem()

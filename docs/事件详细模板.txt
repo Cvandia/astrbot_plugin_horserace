@@ -1,6 +1,6 @@
 AstrBot 扩展字段（可选，默认均为 0）：
 "negative_immunity": 1  # 授予本场持续负面效果免疫，保留有利效果与正常移动；该保护不受普通 buff 删除、缩时或马匹替换影响
-"immediate": 1          # die/away 状态在触发当回合生效；未填写时沿用原版下一回合生效规则
+"immediate": 1          # 仅使 die 状态在触发当回合生效；away 始终下一回合生效，不受此字段影响
 
 {
 "event_name": "事件xxx"      #必要值，此项目为事件名称，logger输出，方便查故障用

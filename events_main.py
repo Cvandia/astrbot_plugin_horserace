@@ -166,7 +166,7 @@ def event_main(race, horse_i, event, event_delay_key = 0):
     #buff_tag，离开：为1则目标离开，此参数生成的buff默认持续999回合
     #buff_tag：away的自定义名称，不填为“离开”
         if event["away"] == 1:
-            event_away(race, targets, event["away_name"], event.get("immediate", 0))
+            event_away(race, targets, event["away_name"])
     #==============================连锁事件预留位置，暂时没做
 
     #===============以下为buff事件===============
@@ -327,10 +327,10 @@ def event_die(race, targets, buff_name, immediate=0):
             logger.info(f'死亡事件判定 {race.player[i].horse} 死了')
 
 #离开事件
-def event_away(race, targets, buff_name, immediate=0):
+def event_away(race, targets, buff_name):
     for i in targets:
         if race.player[i].find_buff("away") == False:
-            race.player[i].add_buff(buff_name, race.round + (0 if immediate else 1), 9999, ["away"])
+            race.player[i].add_buff(buff_name, race.round + 1, 9999, ["away"])
         logger.info(f'{race.player[i].horse} 离开')
 
 #增加buff事件
