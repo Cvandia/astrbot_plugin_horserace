@@ -69,6 +69,9 @@ class RaceService:
         room.task = None
 
     async def _cancel_idle(self, room: Room) -> None:
+        # The idle watcher can start a race itself; never cancel/await itself.
+        if room.idle_task is asyncio.current_task():
+            return
         if room.idle_task and not room.idle_task.done():
             room.idle_task.cancel()
             await asyncio.gather(room.idle_task, return_exceptions=True)
@@ -87,10 +90,13 @@ class RaceService:
                 if remaining > 0:
                     await asyncio.sleep(remaining)
                     continue  # Successful joins may have extended the deadline.
+                if room.race.query_of_player() >= room.race.settings.min_player:
+                    await self._begin_race(event, key, room, automatic=True)
+                    return
                 self.rooms.pop(key, None)
                 try:
                     await asyncio.wait_for(event.send(event.plain_result(
-                        "连续 60 秒无人加入，报名场地已自动清空。发送 赛马创建 可重新开场。"
+                        f"连续 60 秒无人加入，未达到 {room.race.settings.min_player} 人开赛门槛，场地已自动清空。发送 赛马创建 可重新开场。"
                     )), timeout=10)
                 except Exception:
                     logger.exception("[horserace] 场地已自动清空，但通知发送失败")
@@ -99,13 +105,47 @@ class RaceService:
             if room.idle_task is asyncio.current_task():
                 room.idle_task = None
 
+    async def _begin_race(self, event: AstrMessageEvent, key: tuple[str, str], room: Room, automatic: bool = False) -> bool:
+        if self.rooms.get(key) is not room or room.race.start not in (0, 2):
+            return False
+        if room.task and not room.task.done():
+            return False
+        if room.race.query_of_player() < room.race.settings.min_player:
+            return False
+        previous_state = room.race.start
+        room.race.start = 1  # Reserve before awaiting, so manual/timer starts cannot race.
+        room.race.time = time.time()
+        await self._cancel_idle(room)
+        try:
+            message = "报名等待结束，人数已达开赛门槛，比赛自动开始！" if automatic else "比赛开始！"
+            if automatic:
+                await asyncio.wait_for(event.send(event.plain_result(message)), timeout=10)
+            else:
+                await event.send(event.plain_result(message))
+        except Exception:
+            if automatic:
+                logger.exception("[horserace] 自动开赛通知失败，已释放场地")
+                if self.rooms.get(key) is room:
+                    self.rooms.pop(key, None)
+                return False
+            if self.rooms.get(key) is room and room.race.start == 1:
+                room.race.start = previous_state
+                if previous_state == 0:
+                    self._arm_idle(event, room)
+            raise
+        if self.rooms.get(key) is room and room.race.start == 1:
+            room.task = asyncio.create_task(self._run(event, key, room, self.events))
+            return True
+        return False
+
     async def help(self, event: AstrMessageEvent):
         """显示赛马指令。"""
         yield event.plain_result(
             "赛马创建 → 赛马加入 马名 → 赛马开始\n"
             "赛马状态：查看赛况；赛马重置：超时后重置\n"
             "赛马暂停 / 赛马清空 / 赛马事件重载：AstrBot 管理员专用\n"
-            "暂停后由创建者或管理员发送 赛马开始 继续。"
+            "暂停后由创建者或管理员发送 赛马开始 继续。\n"
+            "报名连续 60 秒无人加入后，人数足够自动开赛，不足则清场。"
         )
 
     async def create(self, event: AstrMessageEvent):
@@ -124,7 +164,7 @@ class RaceService:
         room = Room(race_group(settings), str(event.get_sender_id()))
         self.rooms[key] = room
         self._arm_idle(event, room)
-        yield event.plain_result("赛马创建成功！发送 赛马加入 马名 报名。连续 60 秒无人加入将自动清场。")
+        yield event.plain_result(f"赛马创建成功！发送 赛马加入 马名 报名。连续 60 秒无人加入后，满 {settings.min_player} 人自动开赛，不足则清场。")
 
     async def join(self, event: AstrMessageEvent):
         """报名赛马，命令后跟马名，可含空格。"""
@@ -160,19 +200,7 @@ class RaceService:
         elif room.race.query_of_player() < room.race.settings.min_player:
             reply = f"至少需要 {room.race.settings.min_player} 人报名。"
         else:
-            room.race.start = 1
-            room.race.time = time.time()
-            await self._cancel_idle(room)
-            # Reserve running state before yielding, launch only after acknowledgement.
-            try:
-                await event.send(event.plain_result("比赛开始！"))
-            except Exception:
-                room.race.start = 2 if room.race.round else 0
-                if room.race.start == 0 and self._room(event) is room:
-                    self._arm_idle(event, room)
-                raise
-            if self.rooms.get(self._key(event)) is room and room.race.start == 1:
-                room.task = asyncio.create_task(self._run(event, self._key(event), room, self.events))
+            await self._begin_race(event, self._key(event), room)
             return
         yield event.plain_result(reply)
 

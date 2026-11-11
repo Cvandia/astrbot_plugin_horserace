@@ -31,7 +31,7 @@
   },
   "min_player": {
     "type": "int",
-    "description": "最少玩家数",
+    "description": "最少玩家数（手动及自动开赛）",
     "default": 2
   },
   "setting_over_time": {
