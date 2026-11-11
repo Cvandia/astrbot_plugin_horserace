@@ -4,6 +4,7 @@ from astrbot.api import logger
 
 def event_main(race, horse_i, event, event_delay_key = 0):
     event_name = event.get("event_name", "未知事件")
+    blocked_before = {id(h): h.blocked_effect_count for h in race.player}
     try:
     #读取 event_name
         event_name = event["event_name"]
@@ -118,6 +119,10 @@ def event_main(race, horse_i, event, event_delay_key = 0):
         describe = describe.replace('<0>', target_name_0)
         describe = describe.replace('<1>', target_name_1)
 
+        if event.get("negative_immunity") == 1:
+            for i in targets:
+                race.player[i].grant_negative_immunity()
+
     #===============以下为一次性事件===============
     #复活事件：为1则目标复活
         if event["live"] == 1:
@@ -157,11 +162,11 @@ def event_main(race, horse_i, event, event_delay_key = 0):
     #buff_tag，死亡：为1则目标死亡，此参数生成的buff默认持续999回合
     #buff_tag：die的自定义名称，不填为“死亡”
         if event["die"] == 1:
-            event_die(race, targets, event["die_name"])
+            event_die(race, targets, event["die_name"], event.get("immediate", 0))
     #buff_tag，离开：为1则目标离开，此参数生成的buff默认持续999回合
     #buff_tag：away的自定义名称，不填为“离开”
         if event["away"] == 1:
-            event_away(race, targets, event["away_name"])
+            event_away(race, targets, event["away_name"], event.get("immediate", 0))
     #==============================连锁事件预留位置，暂时没做
 
     #===============以下为buff事件===============
@@ -254,6 +259,9 @@ def event_main(race, horse_i, event, event_delay_key = 0):
                     replace_uid = race.player[targets[0]].playeruid
                 logger.info(f'替换事件{replace_name}, {str(replace_uid)}, {replace_id}')
                 race.player[targets[0]].replace_horse_ex(replace_name, replace_uid, replace_id)
+        protected = [h.horse for h in race.player if h.blocked_effect_count > blocked_before.get(id(h), h.blocked_effect_count)]
+        if protected:
+            describe = f"{event_name}触发：{'、'.join(protected)}的不死图腾抵挡了负面效果，其他效果照常结算。"
         return describe
     except Exception:
         logger.exception(f"事件名 {event_name} 执行故障")
@@ -301,6 +309,10 @@ def event_del_buffs(race, targets, del_buffs):
             logger.info(f'{race.player[i].horse} 移除了buff：{j}')
 #马儿互换位置
 def event_track_exchange_location(race, a, b):
+    blocked_a = race.player[a].block_negative(race.player[b].location < race.player[a].location)
+    blocked_b = race.player[b].block_negative(race.player[a].location < race.player[b].location)
+    if blocked_a or blocked_b:
+        return  # A swap is atomic; do not duplicate positions by moving only one side.
     x = race.player[a].location
     race.player[a].location_move_to_event(race.player[b].location)
     race.player[b].location_move_to_event(x)
@@ -308,17 +320,17 @@ def event_track_exchange_location(race, a, b):
 
 
 #死亡事件
-def event_die(race, targets, buff_name):
+def event_die(race, targets, buff_name, immediate=0):
     for i in targets:
         if race.player[i].find_buff("die") == False:
-            race.player[i].add_buff(buff_name, race.round + 1, 9999, ["die"])
+            race.player[i].add_buff(buff_name, race.round + (0 if immediate else 1), 9999, ["die"])
             logger.info(f'死亡事件判定 {race.player[i].horse} 死了')
 
 #离开事件
-def event_away(race, targets, buff_name):
+def event_away(race, targets, buff_name, immediate=0):
     for i in targets:
         if race.player[i].find_buff("away") == False:
-            race.player[i].add_buff(buff_name, race.round + 1, 9999, ["away"])
+            race.player[i].add_buff(buff_name, race.round + (0 if immediate else 1), 9999, ["away"])
         logger.info(f'{race.player[i].horse} 离开')
 
 #增加buff事件

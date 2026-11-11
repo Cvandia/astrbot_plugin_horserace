@@ -11,6 +11,8 @@ def deal_events(events):
 def deal(event):
     event = deepcopy(event)
     event_out = {}
+    event_out["negative_immunity"] = event.get("negative_immunity", 0)
+    event_out["immediate"] = event.get("immediate", 0)
     # 读取事件限定值
     try:
         event_out["race_only"] = event["race_only"]
