@@ -373,6 +373,120 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.service.rooms)
         self.assertIn("自动清空", self.owner.messages[-1])
 
+    async def test_one_player_lobby_still_clears_on_timeout(self):
+        await consume(self.service.create(self.owner))
+        await consume(self.service.join(self.owner))
+        room = self.service._room(self.owner)
+        timer = room.idle_task
+        room.last_join_at -= 61
+        await asyncio.wait_for(timer, timeout=1)
+        self.assertFalse(self.service.rooms)
+        self.assertIsNone(room.task)
+        self.assertIn("未达到 2 人", self.owner.messages[-1])
+
+    async def test_two_or_more_players_auto_start_once(self):
+        for count in (2, 3):
+            with self.subTest(count=count):
+                room = await self.ready()
+                if count == 3:
+                    await consume(self.service.join(Event(user="3", text="赛马加入 青骓")))
+                timer = room.idle_task
+                room.last_join_at -= 61
+                before = len(self.owner.messages)
+                await asyncio.wait_for(timer, timeout=1)
+                self.assertIsNotNone(room.task)
+                await asyncio.wait_for(room.task, timeout=1)
+                messages = self.owner.messages[before:]
+                self.assertEqual(sum("比赛自动开始" in msg for msg in messages), 1)
+                self.assertFalse(any("清空" in msg for msg in messages))
+                self.assertEqual(room.race.round, 1)
+                self.assertFalse(self.service.rooms)
+
+    async def test_auto_start_works_when_creator_has_not_joined(self):
+        await consume(self.service.create(self.owner))
+        for user in ("2", "3"):
+            await consume(self.service.join(Event(user=user, text="赛马加入 马" + user)))
+        room = self.service._room(self.owner)
+        room.last_join_at -= 61
+        await asyncio.wait_for(room.idle_task, timeout=1)
+        await asyncio.wait_for(room.task, timeout=1)
+        self.assertTrue(any("比赛自动开始" in msg for msg in self.owner.messages))
+
+    async def test_auto_start_respects_configured_minimum(self):
+        self.service.config["min_player"] = 3
+        room = await self.ready()
+        room.last_join_at -= 61
+        await asyncio.wait_for(room.idle_task, timeout=1)
+        self.assertIsNone(room.task)
+        self.assertIn("未达到 3 人", self.owner.messages[-1])
+        room = await self.ready()
+        await consume(self.service.join(Event(user="3", text="赛马加入 青骓")))
+        room.last_join_at -= 61
+        await asyncio.wait_for(room.idle_task, timeout=1)
+        await asyncio.wait_for(room.task, timeout=1)
+        self.assertTrue(any("比赛自动开始" in msg for msg in self.owner.messages))
+
+    async def test_manual_start_cancels_expired_timer_without_double_start(self):
+        room = await self.ready()
+        timer = room.idle_task
+        room.last_join_at -= 61
+        await consume(self.service.start(self.owner))
+        self.assertTrue(timer.done())
+        await asyncio.wait_for(room.task, timeout=1)
+        self.assertEqual(sum(msg == "比赛开始！" for msg in self.owner.messages), 1)
+        self.assertFalse(any("比赛自动开始" in msg for msg in self.owner.messages))
+
+    async def test_manual_start_during_auto_ack_does_not_duplicate_game(self):
+        room = await self.ready()
+        sending, release = asyncio.Event(), asyncio.Event()
+        original_send = self.owner.send
+
+        async def held_send(result):
+            if "比赛自动开始" in result:
+                sending.set()
+                await release.wait()
+            await original_send(result)
+
+        self.owner.send = held_send
+        timer = room.idle_task
+        room.last_join_at -= 61
+        await asyncio.wait_for(sending.wait(), timeout=1)
+        response = await consume(self.service.start(self.owner))
+        self.assertIn("正在进行", response[0])
+        release.set()
+        await asyncio.wait_for(timer, timeout=1)
+        await asyncio.wait_for(room.task, timeout=1)
+        self.assertEqual(sum("比赛自动开始" in msg for msg in self.owner.messages), 1)
+
+    async def test_clear_during_auto_ack_cancels_watcher_without_launch(self):
+        room = await self.ready()
+        sending = asyncio.Event()
+
+        async def blocked_send(result):
+            sending.set()
+            await asyncio.Future()
+
+        self.owner.send = blocked_send
+        timer = room.idle_task
+        room.last_join_at -= 61
+        await asyncio.wait_for(sending.wait(), timeout=1)
+        await consume(self.service.clear(Event(admin=True)))
+        self.assertTrue(timer.done())
+        self.assertIsNone(room.task)
+        self.assertFalse(self.service.rooms)
+
+    async def test_auto_start_send_failure_releases_room_without_retry(self):
+        room = await self.ready()
+        timer = room.idle_task
+        room.last_join_at -= 61
+        self.owner.fail = True
+        with patch.object(api.logger, "exception") as log:
+            await asyncio.wait_for(timer, timeout=1)
+        log.assert_called_once()
+        self.assertIsNone(room.task)
+        self.assertIsNone(room.idle_task)
+        self.assertFalse(self.service.rooms)
+
     async def test_successful_join_refreshes_deadline(self):
         await consume(self.service.create(self.owner))
         room = self.service._room(self.owner)
