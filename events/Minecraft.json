@@ -1,0 +1,54 @@
+[
+  {
+    "event_name": "Minecraft：末影人激战",
+    "describe": "<0>被末影人盯上了，正在与末影人激战！\n",
+    "target": 0,
+    "random_event_once": [
+      [
+        49,
+        {
+          "event_name": "Minecraft：获得末影珍珠",
+          "describe": "<0>战胜末影人，获得末影珍珠，传送额外前进3格！",
+          "target": 0,
+          "move": 3
+        }
+      ],
+      [
+        99,
+        {
+          "event_name": "Minecraft：末影人战败",
+          "describe": "<0>没能战胜末影人，只好原地休整，下一回合停留。",
+          "target": 0,
+          "rounds": 1,
+          "name": "末影人战后休整",
+          "locate_lock": 1
+        }
+      ]
+    ]
+  },
+  {
+    "event_name": "Minecraft：不死图腾",
+    "describe": "<0>获得不死图腾！清除已有负面状态，本场后续免疫负面效果，有利效果与正常移动仍然生效。",
+    "target": 0,
+    "target_no_buff": "negative_immunity",
+    "negative_immunity": 1
+  },
+  {
+    "event_name": "Minecraft：灾厄来袭",
+    "describe": "<0>发起了灾厄，在对抗怪物时不幸身亡，退出比赛。",
+    "target": 0,
+    "die": 1,
+    "away": 1,
+    "immediate": 1,
+    "die_name": "灾厄中身亡",
+    "away_name": "退出比赛"
+  },
+  {
+    "event_name": "Minecraft：服务器来了妹子",
+    "describe": "服务器里加入了一个妹子，<0>被妹子吸引走了，下一回合停止前进。",
+    "target": 0,
+    "rounds": 1,
+    "name": "被妹子吸引",
+    "locate_lock": 1
+  }
+]

@@ -87,9 +87,9 @@ class EngineTests(unittest.TestCase):
     def test_all_bundled_packs_and_reload(self):
         a, logs = load_events(ROOT / "events", Path("missing-custom-folder"))
         b, _ = load_events(ROOT / "events", Path("missing-custom-folder"))
-        self.assertEqual(len(a), 103)
+        self.assertEqual(len(a), 107)
         self.assertEqual(a, b)
-        self.assertEqual(len(logs), 9)
+        self.assertEqual(len(logs), 10)
         self.assertFalse(any("失败" in line for line in logs))
 
     def test_bad_pack_does_not_remove_valid_pack(self):
@@ -305,7 +305,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reload_does_not_duplicate(self):
         await self.service._load()
-        self.assertEqual(len(self.service.events), 103)
+        self.assertEqual(len(self.service.events), 107)
 
     async def test_reload_failure_keeps_old_events(self):
         self.service.builtin_dir = Path(self.temp.name) / "missing"

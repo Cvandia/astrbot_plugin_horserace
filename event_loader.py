@@ -9,6 +9,9 @@ def validate_event(event: dict, depth: int = 0) -> None:
         raise ValueError("事件必须是对象，嵌套不能超过 20 层")
     if type(event.get("target")) is not int or not 0 <= event["target"] <= 7:
         raise ValueError("target 必须是 0~7 的整数")
+    for key in ("negative_immunity", "immediate"):
+        if key in event and (type(event[key]) is not int or event[key] not in (0, 1)):
+            raise ValueError(f"{key} 必须是 0 或 1")
     for key in ("describe", "event_name", "name", "die_name", "away_name", "target_is_buff", "target_no_buff"):
         if key in event and not isinstance(event[key], str):
             raise ValueError(f"{key} 必须是字符串")
