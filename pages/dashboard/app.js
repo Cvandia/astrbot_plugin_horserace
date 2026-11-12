@@ -6,6 +6,7 @@
   const newEvent = () => ({event_name:'新事件', describe:'<0>遇到了一件新鲜事！', target:0});
   let pack = [newEvent()], selected = 0, dirty = false, jsonDirty = false;
   let online = false, library = [], test = null, frameIndex = 0, playback = null;
+  let canDeleteCustom=false, deletingPack=false, loadedPackId=null, aiPanel=null;
   const draftKey = 'astrbot-horserace-event-studio-v1';
   const targets = ['自己','随机另一匹马','全场马匹','除自己外全部','全场随机一匹','自己和另一匹','随机相邻赛道','两侧赛道'];
   let blockEditor = null, restoredBlocks = null;
@@ -128,11 +129,41 @@
   }
 
   async function loadLibrary() {
+    const previous=$('library').value;
     const data = await api('packs'); library = data.packs || [];
     $('library').replaceChildren(new Option('选择事件包…', ''));
-    library.forEach((item, index) => $('library').append(new Option(`${item.source === 'builtin' ? '内置' : '自定义'} · ${item.filename}`, index)));
+    library.forEach(item => $('library').append(new Option(`${item.source === 'builtin' ? '内置' : '自定义'} · ${item.filename}${item.error ? '（无法读取）' : ''}`, item.id)));
+    if (library.some(item=>item.id===previous)) $('library').value=previous;
+    updateDeleteButton();
     blockEditor?.setCatalog(blockCatalog());
     if (data.errors?.length) notice('部分事件包未读取：\n' + data.errors.join('\n'), true);
+  }
+
+  const selectedPack = () => library.find(item=>item.id===$('library').value);
+  function updateDeleteButton() {
+    const item=selectedPack();
+    $('deletePack').disabled=deletingPack || !online || !canDeleteCustom || item?.source!=='custom';
+    $('deletePack').title=item?.source==='builtin' ? '内置事件包不能删除' : '仅可删除选中的自定义事件包';
+  }
+  function checkCandidate(value) {
+    if (!Array.isArray(value) || !value.length || value.length>128) throw new Error('生成内容必须是事件包数组');
+    value.forEach(event=>{ basicValidate(event); window.HorseRaceBlockModel.fromEvent(event); });
+  }
+  async function applyAI(value,filename,save) {
+    checkCandidate(value);
+    if ((dirty || jsonDirty) && !await confirmAction('导入 AI 事件包？',`将用 ${value.length} 条 AI 事件替换当前草稿，请先导出需要保留的内容。`)) return;
+    if (save) {
+      const body={pack:value,filename}; let result=await api('save',body);
+      if (result.conflict) {
+        if (!await confirmAction('覆盖已有自定义包？',`将覆盖 ${filename} 并重载事件。`)) return;
+        await api('save',{...body,overwrite:true});
+      }
+    }
+    pack=clone(value); selected=0; $('filename').value=filename || 'AI生成事件.json';
+    loadedPackId=save ? 'custom/'+filename : null;
+    renderEditor(); dirty=!save; $('draftState').textContent=save ? '已保存到机器人' : 'AI 草稿待保存'; saveDraft();
+    if (save) { await loadLibrary(); $('library').value=loadedPackId; updateDeleteButton(); }
+    notice(save ? 'AI 事件包已导入并保存、重载。' : 'AI 事件包已导入编辑器，可检查积木后保存。');
   }
 
   function showTab(tab) {
@@ -201,12 +232,24 @@
   }));
   $('refreshLibrary').addEventListener('click', () => safe(loadLibrary));
   $('library').addEventListener('change', () => safe(async () => {
-    const item = library[Number($('library').value)]; if ($('library').value === '' || !item) return;
-    if (dirty && !await confirmAction('载入事件包？','当前草稿会被替换，请先导出需要保留的内容。')) return;
+    updateDeleteButton();
+    const item = selectedPack(); if (!item) return;
     if (!Array.isArray(item.pack) || !item.pack.length || item.pack.length > 128 || !item.pack.every(e => e && typeof e === 'object' && !Array.isArray(e))) throw new Error('此事件包需要包含 1~128 个事件对象');
+    if ((dirty || jsonDirty) && !await confirmAction('载入事件包？','当前草稿会被替换，请先导出需要保留的内容。')) return;
     item.pack.forEach(event => { basicValidate(event); window.HorseRaceBlockModel.fromEvent(event); });
-    pack = clone(item.pack); selected = 0; $('filename').value = item.source === 'builtin' ? '我的-' + item.filename : item.filename;
+    pack = clone(item.pack); selected = 0; loadedPackId=item.id; $('filename').value = item.source === 'builtin' ? '我的-' + item.filename : item.filename;
     renderEditor(); dirty = false; $('draftState').textContent = item.source === 'builtin' ? '内置包的编辑副本' : '已载入'; saveDraft(); notice('已载入。修改后可保存到自定义事件目录。');
+  }));
+  $('deletePack').addEventListener('click',()=>safe(async()=>{
+    const item=selectedPack();
+    if (!item || item.source!=='custom' || !canDeleteCustom || deletingPack) throw new Error('仅可删除选中的自定义事件包');
+    if (!await confirmAction('删除自定义事件包？',`将删除 ${item.filename} 并重载事件。文件会保留备份；当前编辑草稿及进行中的比赛保留。`)) return;
+    deletingPack=true; updateDeleteButton();
+    try {
+      const result=await api('delete',{id:item.id,confirm:true});
+      if (loadedPackId===item.id) { loadedPackId=null; dirty=true; $('draftState').textContent='事件包已删除，草稿保留'; saveDraft(); }
+      await loadLibrary(); notice(`${result.filename} 已删除并重载，备份已保留。`);
+    } finally { deletingPack=false; updateDeleteButton(); }
   }));
   $('saveBtn').addEventListener('click', () => safe(async () => {
     await validate();
@@ -214,6 +257,7 @@
     let result = await api('save',body);
     if (result.conflict) { if (!await confirmAction('覆盖已有自定义包？',`将覆盖 ${body.filename} 并重载事件。进行中的比赛仍使用原快照。`)) return; result = await api('save',{...body,overwrite:true}); }
     dirty = false; $('draftState').textContent = '已保存到机器人'; saveDraft(); notice(`${result.filename} 已保存并重载。`); await loadLibrary();
+    loadedPackId='custom/'+result.filename; $('library').value=loadedPackId; updateDeleteButton();
   }));
   $('players').addEventListener('input', refreshActors);
   $('runTest').addEventListener('click', () => safe(async () => {
@@ -261,6 +305,7 @@
     catch (error) { $('validation').className='validation bad'; $('validation').textContent='草稿：'+error.message; }
   }
   refreshActors(); showTab(location.hash === '#test' ? 'test' : 'editor');
+  aiPanel=new window.HorseRaceAIEventPanel({api,notice,validate:checkCandidate,apply:applyAI});
   (async () => {
     try {
       if (!window.HorseRaceDev) {
@@ -268,6 +313,10 @@
         await Promise.race([window.AstrBotPluginPage.ready(),new Promise((_,reject) => setTimeout(() => reject(new Error('bridge timeout')),7000))]);
       }
       online = true; await loadLibrary();
+      try {
+        const info=await api('capabilities'); canDeleteCustom=info.can_delete_custom===true; aiPanel.configure(info);
+      } catch { notice('请重载插件后使用事件包删除和 AI 功能。'); }
+      updateDeleteButton();
       $('connection').textContent = '已连接'; $('connectionDot').classList.add('online');
       $('saveBtn').disabled = false; $('runTest').disabled = false;
     } catch {

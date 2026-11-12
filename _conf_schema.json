@@ -58,5 +58,18 @@
     "type": "bool",
     "description": "图片播报（需要 AstrBot 渲染服务）",
     "default": false
+  },
+  "enable_ai_event_generator": {
+    "type": "bool",
+    "description": "使用内置 AI，一句话生成事件",
+    "default": false,
+    "hint": "启用后在工作台旁显示 AI 对话，生成事件包后可导入或保存。"
+  },
+  "ai_event_provider_id": {
+    "type": "string",
+    "description": "事件生成使用的模型",
+    "default": "",
+    "_special": "select_provider",
+    "hint": "优先调用此处指定的 AstrBot 模型；留空使用 AstrBot 默认聊天模型。"
   }
 }

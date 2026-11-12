@@ -101,7 +101,7 @@ class DashboardAPITests(unittest.IsolatedAsyncioTestCase):
 
     async def test_routes_are_namespaced(self):
         routes = [call.args[0] for call in self.context.register_web_api.call_args_list]
-        self.assertEqual(len(routes), 4)
+        self.assertEqual(len(routes), 7)
         self.assertTrue(all(r.startswith("/astrbot_plugin_horserace/dashboard/") for r in routes))
 
     async def test_library_validate_and_simulate(self):
@@ -162,6 +162,83 @@ class DashboardAPITests(unittest.IsolatedAsyncioTestCase):
         self.api.closed = True
         with self.assertRaises(ValueError):
             await self.api.handle("packs")
+
+    async def test_delete_custom_keeps_builtin_and_running_event_snapshot(self):
+        name = "基础事件.json"
+        builtin = (self.service.builtin_dir / name).read_bytes()
+        pack = [{"target": 0, "event_name": "仅自定义包存在的事件", "move": 2}]
+        await self.api.handle("save", {"filename": name, "pack": pack})
+        snapshot = self.service.events
+        raw = (self.service.custom_dir / name).read_bytes()
+        result = await self.api.handle("delete", {"id": "custom/" + name, "confirm": True})
+        self.assertFalse((self.service.custom_dir / name).exists())
+        backup = self.service.custom_dir.parent / "deleted_events" / result["backup_filename"]
+        self.assertEqual(backup.read_bytes(), raw)
+        self.assertEqual((self.service.builtin_dir / name).read_bytes(), builtin)
+        self.assertTrue(any(e["event_name"] == pack[0]["event_name"] for e in snapshot))
+        self.assertFalse(any(e["event_name"] == pack[0]["event_name"] for e in self.service.events))
+        with self.assertRaises(ValueError):
+            await self.api.handle("delete", {"id": "custom/" + name, "confirm": True})
+
+    async def test_delete_requires_confirmation_and_rejects_builtin_or_traversal(self):
+        name = "confirmation.json"
+        await self.api.handle("save", {"filename": name, "pack": payload()["pack"]})
+        with self.assertRaises(ValueError):
+            await self.api.handle("delete", {"id": "custom/" + name})
+        self.assertTrue((self.service.custom_dir / name).exists())
+        builtin = (self.service.builtin_dir / "基础事件.json").read_bytes()
+        for pack_id in ("builtin/基础事件.json", "custom/../基础事件.json", "custom/a/b.json", "custom/a\\b.json", "custom/C:x.json", "custom/file.json:stream.json", "custom/"):
+            with self.subTest(pack_id=pack_id), self.assertRaises(ValueError):
+                await self.api.handle("delete", {"id": pack_id, "confirm": True})
+        self.assertEqual((self.service.builtin_dir / "基础事件.json").read_bytes(), builtin)
+
+    async def test_failed_delete_reload_restores_file_and_memory(self):
+        await self.api.handle("save", {"filename": "rollback.json", "pack": payload()["pack"]})
+        path = self.service.custom_dir / "rollback.json"
+        original, events = path.read_bytes(), self.service.events
+        async def broken_reload():
+            self.service.events = []
+            raise RuntimeError("reload failed")
+        self.service._load = broken_reload
+        with self.assertRaises(RuntimeError):
+            await self.api.handle("delete", {"id": "custom/rollback.json", "confirm": True})
+        self.assertEqual(path.read_bytes(), original)
+        self.assertIs(self.service.events, events)
+        self.assertEqual(list((self.service.custom_dir.parent / "deleted_events").glob("*.json")), [])
+
+    async def test_delete_cancelled_reload_restores_file(self):
+        await self.api.handle("save", {"filename": "cancel.json", "pack": payload()["pack"]})
+        self.service._load = AsyncMock(side_effect=asyncio.CancelledError())
+        with self.assertRaises(asyncio.CancelledError):
+            await self.api.handle("delete", {"id": "custom/cancel.json", "confirm": True})
+        self.assertTrue((self.service.custom_dir / "cancel.json").exists())
+
+    async def test_unreadable_custom_pack_remains_listed_and_deletable(self):
+        path = self.service.custom_dir / "坏 JSON.json"
+        path.write_bytes(b"not-json")
+        listing = await self.api.handle("packs")
+        item = next(item for item in listing["packs"] if item["id"] == "custom/坏 JSON.json")
+        self.assertIsNone(item["pack"])
+        self.assertTrue(item["error"])
+        await self.api.handle("delete", {"id": item["id"], "confirm": True})
+        self.assertFalse(path.exists())
+
+    async def test_delete_rejects_symlink_to_builtin(self):
+        path = self.service.custom_dir / "linked.json"
+        try:
+            path.symlink_to(self.service.builtin_dir / "基础事件.json")
+        except OSError:
+            self.skipTest("Creating symlinks requires OS permission")
+        with self.assertRaises(ValueError):
+            await self.api.handle("delete", {"id": "custom/linked.json", "confirm": True})
+        self.assertTrue(path.is_symlink())
+
+    async def test_capabilities_and_disabled_ai_are_enforced_server_side(self):
+        caps = await self.api.handle("capabilities")
+        self.assertFalse(caps["ai_enabled"])
+        self.assertTrue(caps["can_delete_custom"])
+        with self.assertRaisesRegex(ValueError, "未开启"):
+            await self.api.handle("ai_chat", {"prompt": "生成一个事件"})
 
 
 if __name__ == "__main__":

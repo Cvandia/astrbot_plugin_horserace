@@ -31,7 +31,7 @@ _⭐ 基于 AstrBot 的多人随机事件赛马小游戏 ⭐_
 > **该插件可能存在刷屏，请注意。** 比赛会逐回合播报赛况，建议在合适的群聊中使用，并按需调整回合间隔。
 
 > [!NOTE]
-> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。已通过 81 项 Python 回归测试和 8 项积木编辑器测试，真实 AstrBot 群聊联调尚待完成。
+> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。提供 100 项 Python 回归测试和 8 项积木编辑器测试，真实 AstrBot 群聊联调尚待完成。
 
 ## 📜 免责声明
 
@@ -73,6 +73,10 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 
 页面源码位于 `page/dashboard/`，兼容运行入口位于 `pages/dashboard/`。使用方法、目录说明和开发验证见 [工作台文档](docs/dashboard.md)。旧版管理面板没有页面入口时，需升级至支持插件 Pages 的 AstrBot；直接打开 HTML 可离线编辑及导入导出。
 
+顶部可删除自定义事件包，内置包不能删除。删除后保留备份并重载，当前编辑草稿和进行中比赛的事件快照继续保留。
+
+在插件配置中开启 **使用内置 AI，一句话生成事件** 后，工作台旁显示 AI 对话。优先调用 **事件生成使用的模型** 中选择的 AstrBot 模型；留空使用 AstrBot 默认聊天模型，通过原生 `Context.llm_generate` 调用，无需额外填写密钥。可连续对话修改，生成后选择「导入编辑器」或「导入并保存」，不会自动覆盖文件。
+
 ## ⚙️ 配置
 
 在 **AstrBot 管理面板 → 插件配置** 中修改。新比赛使用新配置，进行中的比赛保留创建时规则。
@@ -91,6 +95,8 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 | `round_interval` | float | 6.0 | 回合播报后的等待秒数，1~60 |
 | `max_rounds` | int | 100 | 回合上限，1~500；仍无胜者则平局 |
 | `image_mode` | bool | false | 图片播报，依赖 AstrBot 文字转图片服务；失败回退文字 |
+| `enable_ai_event_generator` | bool | false | 开启工作台 AI 对话与事件生成 |
+| `ai_event_provider_id` | string | 空 | 从 AstrBot 模型列表选择，优先使用；空则用默认聊天模型 |
 
 最小值须不大于对应最大值；`min_player <= max_player`。默认文字播报无需图片渲染服务。
 
@@ -124,7 +130,7 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 - [x] AstrBot 原生指令、配置和管理员权限
 - [x] 多群独立比赛、异步播报、暂停与恢复
 - [x] 报名阶段 60 秒无人加入，人数达标自动开赛、不足则清场
-- [x] 65 项本地测试及自动化测试工作流
+- [x] Python 回归、积木编辑器测试及自动化测试工作流
 - [ ] 真实 AstrBot 群聊联调与各平台兼容性验收
 
 **喜欢记得点个 star ⭐**

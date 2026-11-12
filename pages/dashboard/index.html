@@ -11,7 +11,7 @@
     <aside class="sidebar">
       <a class="brand" href="#editor">赛马游戏</a>
       <nav aria-label="工作台功能"><button class="nav active" data-tab="editor">事件编辑</button><button class="nav" data-tab="test">开发测试</button></nav>
-      <div class="sidebar-library"><label for="library">事件包</label><select id="library"><option value="">选择事件包…</option></select><button class="quiet" id="refreshLibrary">刷新</button></div>
+      <div class="sidebar-library"><label for="library">事件包</label><select id="library"><option value="">选择事件包…</option></select><button class="quiet" id="refreshLibrary">刷新</button><button id="deletePack" class="danger-text" disabled title="选择自定义事件包后可删除">删除事件包</button></div>
       <div class="sidebar-note"><span class="dot" id="connectionDot"></span><span id="connection">正在连接…</span></div>
     </aside>
     <main>
@@ -28,6 +28,13 @@
           <div id="validation" class="validation" role="status" aria-live="polite">等待校验</div>
           <details id="sourceDetails" class="source-details"><summary>高级 JSON（可选）</summary><p class="hint">常用事件直接拼积木。灰色高级字段会原样保留；修改 JSON 后应用到积木。</p><textarea id="eventJson" spellcheck="false" aria-label="事件 JSON"></textarea><div class="toolbar-actions"><button id="formatJson">格式化</button><button id="applyJson">应用 JSON 到积木</button></div></details>
         </div>
+        <aside id="aiPanel" class="ai-panel" hidden>
+          <div class="section-title"><h2>AI 事件助手</h2><button id="clearAI" class="quiet">新对话</button></div>
+          <p class="hint" id="aiModel">使用 AstrBot 默认模型</p>
+          <div id="aiMessages" class="ai-messages" role="log" aria-live="polite"><p class="hint">描述想生成的事件包，也可以继续修改上一版。</p></div>
+          <form id="aiForm"><label for="aiPrompt">一句话描述事件</label><textarea id="aiPrompt" rows="3" maxlength="2000" placeholder="描述事件、概率和效果…" required></textarea><button id="sendAI" type="submit" class="primary wide">发送</button></form>
+          <div id="aiCandidate" class="ai-candidate" hidden><h3>生成的事件包</h3><ul id="aiEventNames"></ul><label for="aiFilename">文件名</label><input id="aiFilename" value="AI生成事件.json" maxlength="69" /><div class="toolbar-actions"><button id="importAI">导入编辑器</button><button id="saveAI" class="primary">导入并保存</button></div></div>
+        </aside>
       </section>
 
       <section id="testPanel" class="test-grid" hidden>
@@ -44,6 +51,7 @@
   <script src="./vendor/blockly/multiline/index.js" defer></script>
   <script src="./block-model.js" defer></script>
   <script src="./block-editor.js" defer></script>
+  <script src="./ai-panel.js" defer></script>
   <script src="./app.js" defer></script>
 </body>
 </html>
