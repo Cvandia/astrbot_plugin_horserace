@@ -49,6 +49,18 @@ class DashboardCoreTests(unittest.TestCase):
         self.assertGreaterEqual(result["frames"][1]["horses"][0]["position"], 4)
         self.assertGreaterEqual(result["frames"][3]["horses"][0]["delta"], 6)
 
+    def test_add_horse_is_visible_in_simulation_and_spawns_once_for_all_targets(self):
+        for extra in ({}, {"uid": "npc-1", "location": 5}):
+            result = core.simulate(payload(pack=[{"target": 2, "add_horse": {"horsename": "援军", "owner": "事件玩家", **extra}}], rounds=2))
+            self.assertEqual(len(result["frames"][0]["horses"]), 2)
+            horses = result["frames"][1]["horses"]
+            self.assertEqual(len(horses), 3)
+            spawned = horses[-1]
+            self.assertEqual(spawned["name"], "援军")
+            self.assertEqual(spawned["owner"], "事件玩家")
+            self.assertGreaterEqual(spawned["position"], extra.get("location", 0))
+            self.assertEqual(len(result["frames"][2]["horses"]), 3)
+
     def test_totem_and_next_round_leaving_preserved(self):
         for protected in (False, True):
             result = core.simulate(payload(pack=[{"target": 0, "away": 1, "immediate": 1}], players=[{"name": "a", "protected": protected}, {"name": "b"}]))

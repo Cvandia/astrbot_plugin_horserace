@@ -95,6 +95,17 @@ class EventAITests(unittest.IsolatedAsyncioTestCase):
 
 
 class EventAIParsingTests(unittest.TestCase):
+    def test_add_horse_data_is_supported_in_nested_ai_events(self):
+        for horse in ({"horsename": "援军", "owner": "玩家"}, {"horsename": "援军", "owner": "玩家", "uid": 42, "location": 3}, {"horsename": "援军", "owner": "玩家", "uid": "12345678901234567890"}):
+            event = {"target": 0, "another_event_self": {"target": 0, "add_horse": horse}}
+            self.assertEqual(module.parse_ai_response(response(pack=[event]).completion_text)["pack"], [event])
+        self.assertIn("add_horse", module.SYSTEM_PROMPT)
+
+    def test_add_horse_invalid_fields_and_types_are_rejected(self):
+        for horse in ({}, {"horsename": "新马"}, {"horsename": " ", "owner": "玩家"}, {"horsename": "新马", "owner": "玩家", "uid": True}, {"horsename": "新马", "owner": "玩家", "uid": 2**53}, {"horsename": "新马", "owner": "玩家", "uid": ""}, {"horsename": "新马", "owner": "玩家", "location": 1.5}, {"horsename": "新马", "owner": "玩家", "location": 1000001}, {"horsename": "新马", "owner": "玩家", "code": "run"}):
+            with self.subTest(horse=horse), self.assertRaises(ValueError):
+                module.parse_ai_response(response(pack=[{"target": 0, "add_horse": horse}]).completion_text)
+
     def test_json_fences_and_raw_event_array_are_supported(self):
         raw = response().completion_text
         self.assertEqual(module.parse_ai_response("```json\n" + raw + "\n```")["pack"], PACK)

@@ -14,6 +14,9 @@ SYSTEM_PROMPT = """你是赛马事件包编辑助手。根据本工作台对话�
 名称、消息、buff 显示名可自由编写。消息 <0> 代表发起马，<1> 代表目标。不要输出程序代码。
 每个事件 target 必填：0自己，1随机另一匹，2全场，3其他全部，4全场随机一匹，5自己和另一匹，6相邻一匹，7两侧。
 基础字段 event_name/describe 为字符串；move 为额外位移整数；track_to_location 为传送位置整数。
+add_horse={"horsename":"新马名","owner":"所属玩家","uid":114514,"location":0}，增加一匹赛马。
+horsename/owner为必填非空字符串，uid可省略（默认114514），允许整数或字符串；location可省略（默认0），为整数。
+add_horse 每次事件只增加一匹马，与target数量无关，全场上限32匹；数字用户ID超过安全整数范围时用字符串。
 track_random_location=1随机传送；track_exchange_location=1交换位置，只能搭配target=1或6；live=1复活。
 die=1死亡，immediate=1仅让死亡当回合生效；away=1永远下一回合离场，不能立即离场。
 negative_immunity=1授予本场负面免疫，保留正面效果。它不需要 rounds，也不能被普通移除。
@@ -31,7 +34,7 @@ race_only为本场唯一字符串标识。可选字段省略，不填无意义�
 """
 
 FLAGS = {"die", "immediate", "away", "live", "negative_immunity", "locate_lock", "vertigo", "hiding", "track_exchange_location", "track_random_location"}
-FIELDS = FLAGS | {"target", "event_name", "describe", "move", "track_to_location", "buff_time_add", "del_buff", "die_name", "away_name", "rounds", "name", "move_min", "move_max", "other_buff", "race_only", "target_is_buff", "target_no_buff", "random_event_once", "random_event", "delay_event", "delay_event_self", "another_event", "another_event_self"}
+FIELDS = FLAGS | {"target", "event_name", "describe", "move", "track_to_location", "add_horse", "buff_time_add", "del_buff", "die_name", "away_name", "rounds", "name", "move_min", "move_max", "other_buff", "race_only", "target_is_buff", "target_no_buff", "random_event_once", "random_event", "delay_event", "delay_event_self", "another_event", "another_event_self"}
 
 
 def validate_ai_pack(pack):
@@ -46,6 +49,16 @@ def validate_ai_pack(pack):
         unknown = set(event) - FIELDS
         if unknown:
             raise ValueError("AI 生成了不支持的字段：" + ", ".join(sorted(unknown)))
+        if "add_horse" in event:
+            horse = event["add_horse"]
+            if set(horse) - {"horsename", "owner", "uid", "location"}:
+                raise ValueError("add_horse 包含不支持的字段")
+            if any(not isinstance(horse.get(key), str) or not horse[key].strip() for key in ("horsename", "owner")):
+                raise ValueError("add_horse 必须填写马名 horsename 和所属玩家 owner")
+            if "uid" in horse and not (isinstance(horse["uid"], str) and horse["uid"].strip() or type(horse["uid"]) is int and abs(horse["uid"]) <= 2**53 - 1):
+                raise ValueError("add_horse.uid 必须是非空字符串或安全范围内的整数")
+            if "location" in horse and (type(horse["location"]) is not int or abs(horse["location"]) > 1000000):
+                raise ValueError("add_horse.location 必须是合理范围内的整数")
         for key in FLAGS:
             if key in event and event[key] not in (0, 1):
                 raise ValueError(f"{key} 必须为 0 或 1")

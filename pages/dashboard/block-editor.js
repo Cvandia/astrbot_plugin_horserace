@@ -6,7 +6,7 @@
   'use strict';
   const targets = [['自己','0'],['随机另一匹马','1'],['全部马匹','2'],['除自己外全部','3'],['全场随机一匹','4'],['自己和另一匹','5'],['随机相邻赛道','6'],['两侧赛道','7']];
   const flagOptions = [['复活','live'],['获得图腾保护','negative_immunity'],['交换位置（目标选另一匹或相邻赛道）','track_exchange_location'],['随机传送','track_random_location']];
-  const types = {hr_condition:'buff 条件',hr_unique:'本场唯一标识',hr_move:'额外位移',hr_teleport:'传送位置',hr_flag:'复活 / 图腾 / 交换 / 随机传送',hr_die:'死亡',hr_away:'下回合离场',hr_status:'持续 buff',hr_remove_buff:'移除 buff',hr_buff_time:'调整 buff 时长',hr_random:'随机分支',hr_branch:'随机结果',hr_delay:'延迟事件',hr_chain:'连锁事件',hr_nested_event:'子事件',hr_buff_ref:'附加 buff'};
+  const types = {hr_condition:'buff 条件',hr_unique:'本场唯一标识',hr_move:'额外位移',hr_teleport:'传送位置',hr_add_horse:'新增赛马',hr_flag:'复活 / 图腾 / 交换 / 随机传送',hr_die:'死亡',hr_away:'下回合离场',hr_status:'持续 buff',hr_remove_buff:'移除 buff',hr_buff_time:'调整 buff 时长',hr_random:'随机分支',hr_branch:'随机结果',hr_delay:'延迟事件',hr_chain:'连锁事件',hr_nested_event:'子事件',hr_buff_ref:'附加 buff'};
 
   function register(B) {
     if (B.Blocks.hr_event) return;
@@ -37,6 +37,14 @@
     B.Blocks.hr_condition = {init() { this.appendDummyInput().appendField('目标').appendField(new B.FieldDropdown([['必须拥有 buff','target_is_buff'],['不能拥有 buff','target_no_buff']]),'KIND').appendField(buff('condition'),'BUFF'); effect(this,'#5b80bd'); }};
     B.Blocks.hr_unique = {init() { this.appendDummyInput().appendField('本场仅触发一次，标识').appendField(text('唯一事件'),'KEY'); effect(this,'#5b80bd'); }};
     for (const [type, label, value] of [['hr_move','额外位移（负数后退）',3],['hr_teleport','传送到位置',5],['hr_buff_time','全部 buff 时长增减',1]]) B.Blocks[type] = {init() { this.appendDummyInput().appendField(label).appendField(num(value),'VALUE'); effect(this,type === 'hr_buff_time' ? '#56a56b' : '#4c97ff'); }};
+    B.Blocks.hr_add_horse = {init() {
+      this.appendDummyInput().appendField('新增赛马，马名').appendField(text('新赛马'),'NAME');
+      this.appendDummyInput().appendField('所属玩家').appendField(text('事件玩家'),'OWNER');
+      this.appendDummyInput().appendField('用户 ID（可选）').appendField(text(''),'UID');
+      this.appendDummyInput().appendField('初始位置').appendField(num(0),'LOCATION');
+      effect(this,'#9966cc'); this.setInputsInline(false);
+      this.setTooltip('每次触发新增一匹马，与目标数量无关。用户 ID 留空时使用引擎默认值 114514，初始位置默认为 0；全场最多 32 匹。');
+    }};
     B.Blocks.hr_flag = {init() { this.appendDummyInput().appendField(new B.FieldDropdown(flagOptions),'KIND').appendField(new B.FieldCheckbox('TRUE'),'ENABLED').appendField('启用'); effect(this,'#9966cc'); }};
     B.Blocks.hr_die = {init() { this.appendDummyInput().appendField('死亡').appendField(new B.FieldCheckbox('TRUE'),'ENABLED').appendField('当回合生效').appendField(new B.FieldCheckbox('FALSE'),'NOW'); this.appendDummyInput().appendField('显示为').appendField(text('死亡'),'NAME'); effect(this,'#b45c76'); }};
     B.Blocks.hr_away = {init() { this.appendDummyInput().appendField('下回合离场').appendField(new B.FieldCheckbox('TRUE'),'ENABLED').appendField('显示为').appendField(text('离开'),'NAME'); effect(this,'#b45c76'); this.setTooltip('始终在下一回合生效，保持原赛马引擎的离场逻辑。'); }};
@@ -68,6 +76,7 @@
     {kind:'category',name:'buff',colour:'#56a56b',contents:[block('hr_status'),block('hr_status',{ROUNDS:1,NAME:'停留',STOP:true}),block('hr_buff_ref'),block('hr_remove_buff'),block('hr_buff_time'),block('hr_flag',{KIND:'negative_immunity',ENABLED:true})]},
     {kind:'category',name:'条件',colour:'#5b80bd',contents:[block('hr_condition'),block('hr_unique')]},
     {kind:'category',name:'死亡 / 离场',colour:'#b45c76',contents:[block('hr_die'),block('hr_away'),block('hr_flag',{KIND:'live',ENABLED:true})]},
+    {kind:'category',name:'新增赛马',colour:'#9966cc',contents:[block('hr_add_horse')]},
     {kind:'category',name:'随机 / 延迟',colour:'#df9728',contents:[block('hr_random',undefined,randomInputs()),block('hr_branch',undefined,{EVENT:nested()}),block('hr_delay',undefined,{EVENT:nested()}),block('hr_chain',undefined,{EVENT:nested()}),block('hr_nested_event')]},
   ]};
 
@@ -94,7 +103,7 @@
     loadState(state) {
       if (JSON.stringify(state).length>1024*1024) throw new Error('积木草稿过大');
       this.loading=true;
-      try { this.B.serialization.workspaces.load(state,this.workspace); this.workspace.clearUndo(); this.last=JSON.stringify(this.getState()); }
+      try { this.B.serialization.workspaces.load(Model.upgradeDraft(state),this.workspace); this.workspace.clearUndo(); this.last=JSON.stringify(this.getState()); }
       finally { this.loading=false; }
       this.resize();
     }

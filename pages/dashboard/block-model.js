@@ -52,6 +52,14 @@
     }
     if (typeof rest.race_only === 'string') effects.push(state('hr_unique', {KEY: take('race_only')}));
     for (const [key, type] of Object.entries(numericTypes)) if (Number.isInteger(rest[key])) effects.push(state(type, {VALUE: take(key)}));
+    const horse = rest.add_horse;
+    if (horse && !Array.isArray(horse) && typeof horse === 'object' && typeof horse.horsename === 'string' && typeof horse.owner === 'string'
+        && Object.keys(horse).every(key => ['horsename','owner','uid','location'].includes(key))
+        && (!own(horse,'uid') || typeof horse.uid === 'string' || Number.isSafeInteger(horse.uid))
+        && (!own(horse,'location') || Number.isSafeInteger(horse.location))) {
+      effects.push(state('hr_add_horse', {NAME:horse.horsename, OWNER:horse.owner, UID:String(horse.uid ?? ''), LOCATION:horse.location ?? 0}, {}, {present:Object.keys(horse), uidType:typeof horse.uid}));
+      take('add_horse');
+    }
     for (const key of flags) if (rest[key] === 1 || rest[key] === 0) effects.push(state('hr_flag', {KIND: key, ENABLED: take(key) === 1 ? 'TRUE' : 'FALSE'}));
     for (const key of ['die', 'away']) if (rest[key] === 1 || rest[key] === 0) {
       const f = {ENABLED: take(key) === 1 ? 'TRUE' : 'FALSE', NAME: event[`${key}_name`] ?? (key === 'die' ? '死亡' : '离开')};
@@ -101,6 +109,29 @@
     return {blocks: {languageVersion: 0, blocks: [root]}};
   }
 
+  function upgradeDraft(workspace) {
+    // Convert old advanced-field drafts without rebuilding unrelated or
+    // unfinished blocks, their connections, IDs, or layout.
+    const visit = node => {
+      if (!node || typeof node !== 'object') return node;
+      if (Array.isArray(node)) return node.map(visit);
+      const updated = Object.fromEntries(Object.entries(node).map(([key,value]) => [key,visit(value)]));
+      if (updated.type !== 'hr_extra' || updated.disabled || updated.disabledReasons?.length) return updated;
+      let info;
+      try { info = meta(updated); } catch { return updated; }
+      if (!info.value?.add_horse) return updated;
+      let horse;
+      try { horse = eventBlock({target:0,add_horse:info.value.add_horse}).inputs.EFFECTS?.block; } catch { return updated; }
+      if (horse?.type !== 'hr_add_horse') return updated;
+      const rest = {...info.value}; delete rest.add_horse;
+      if (!Object.keys(rest).length) return {...updated,...horse};
+      const extra = {...updated,fields:{...updated.fields,KEYS:Object.keys(rest).join(', ')},data:JSON.stringify({...info,value:rest})};
+      delete extra.x; delete extra.y;
+      return {...horse,...(own(updated,'x') ? {x:updated.x,y:updated.y} : {}),next:{block:extra}};
+    };
+    return visit(copy(workspace));
+  }
+
   function toEvent(workspace) {
     let budget = 1000;
     const roots = workspace?.blocks?.blocks || [];
@@ -141,6 +172,17 @@
           if (f.BUFF) add({[f.KIND]: text(effect, 'BUFF')});
         } else if (effect.type === 'hr_unique') add({race_only: text(effect, 'KEY')});
         else if (Object.values(numericTypes).includes(effect.type)) add({[Object.keys(numericTypes).find(key => numericTypes[key] === effect.type)]: number(effect, 'VALUE')});
+        else if (effect.type === 'hr_add_horse') {
+          const horse = {horsename:text(effect,'NAME'), owner:text(effect,'OWNER')};
+          if (!horse.horsename.trim() || !horse.owner.trim()) throw new Error('新增赛马必须填写马名和所属玩家');
+          const uid = text(effect,'UID'), location = number(effect,'LOCATION');
+          if (uid || info.present?.includes('uid') && info.uidType === 'string') {
+            const numeric = /^-?(0|[1-9]\d*)$/.test(uid) && Number.isSafeInteger(Number(uid));
+            horse.uid = info.uidType === 'string' || !numeric ? uid : Number(uid);
+          }
+          if (location || info.present?.includes('location')) horse.location = location;
+          add({add_horse:horse});
+        }
         else if (effect.type === 'hr_flag') {
           if (!flags.includes(f.KIND)) throw new Error('效果类型无效');
           add({[f.KIND]: yes(effect, 'ENABLED') ? 1 : 0});
@@ -186,5 +228,5 @@
     }
     return readEvent(roots[0]);
   }
-  return {fromEvent, toEvent, catalog, builtins};
+  return {fromEvent, toEvent, upgradeDraft, catalog, builtins};
 });

@@ -77,6 +77,52 @@ test('advanced fields and unsupported values are retained explicitly', () => {
   assert.equal(read(w).move,-3); assert.deepEqual(read(w).future_field,{enabled:true}); w.dispose();
 });
 
+test('add horse fields are editable blocks and optional fields preserve their original types', () => {
+  for (const horse of [{horsename:'新马',owner:'玩家'}, {horsename:'新马',owner:'玩家',uid:0,location:0}, {horsename:'新马',owner:'玩家',uid:'000123',location:4}]) {
+    const w=workspace({target:0,add_horse:horse});
+    const block=w.getAllBlocks().find(b=>b.type==='hr_add_horse');
+    assert.ok(block); assert.ok(!w.getAllBlocks().some(b=>b.type==='hr_extra'));
+    assert.deepEqual(read(w).add_horse,horse);
+    block.setFieldValue('援军','NAME'); block.setFieldValue('新玩家','OWNER'); block.setFieldValue(6,'LOCATION');
+    assert.deepEqual(read(w).add_horse,{...horse,horsename:'援军',owner:'新玩家',location:6});
+    block.setFieldValue('12345678901234567890','UID');
+    assert.equal(read(w).add_horse.uid,'12345678901234567890'); w.dispose();
+  }
+});
+
+test('quick-add horse block compiles inside nested events and rejects duplicate or missing names', () => {
+  assert.equal(Editor.types.hr_add_horse,'新增赛马');
+  const w=workspace({target:0,another_event_self:{target:0}});
+  const child=w.getAllBlocks().find(b=>b.type==='hr_nested_event');
+  const added=w.newBlock('hr_add_horse'); child.getInput('EFFECTS').connection.connect(added.previousConnection);
+  assert.deepEqual(read(w).another_event_self.add_horse,{horsename:'新赛马',owner:'事件玩家'});
+  added.setFieldValue('','OWNER'); assert.throws(()=>read(w),/马名和所属玩家/);
+  added.setFieldValue('玩家','OWNER'); added.setFieldValue('42','UID');
+  assert.equal(read(w).another_event_self.add_horse.uid,42);
+  const duplicate=w.newBlock('hr_add_horse'); added.nextConnection.connect(duplicate.previousConnection);
+  assert.throws(()=>read(w),/重复设置 add_horse/); w.dispose();
+});
+
+test('unsupported horse data stays advanced and old saved drafts upgrade without losing other fields', () => {
+  const horse={horsename:'旧马',owner:'玩家',future_option:{enabled:true}};
+  const w=workspace({target:0,add_horse:horse});
+  assert.ok(w.getAllBlocks().some(b=>b.type==='hr_extra'));
+  assert.deepEqual(read(w).add_horse,horse); w.dispose();
+  const legacy=new B.Workspace();
+  for (const other of [{}, {future_field:{enabled:true}}]) {
+    const value={add_horse:{horsename:'旧草稿',owner:'玩家',uid:'42'},...other};
+    const advanced={type:'hr_extra',id:'advanced',fields:{KEYS:Object.keys(value).join(', ')},data:JSON.stringify({value}),next:{block:{type:'hr_move',id:'move',fields:{VALUE:3}}}};
+    const draft={blocks:{languageVersion:0,blocks:[{type:'hr_event',id:'root',x:35,y:30,fields:{NAME:'',DESCRIPTION:'',TARGET:'0'},inputs:{EFFECTS:{block:advanced}}}]}};
+    B.serialization.workspaces.load(Model.upgradeDraft(draft),legacy);
+    assert.equal(legacy.getAllBlocks().filter(b=>b.type==='hr_add_horse').length,1);
+    assert.deepEqual(read(legacy),{target:0,...value,move:3});
+    assert.equal(legacy.getBlockById('move').getFieldValue('VALUE'),3);
+    assert.equal(draft.blocks.blocks[0].inputs.EFFECTS.block.type,'hr_extra');
+    legacy.clear();
+  }
+  legacy.dispose();
+});
+
 test('orphan, duplicate and incomplete stacks fail instead of silently dropping blocks', () => {
   const w=workspace({target:0,move:3});
   const orphan=w.newBlock('hr_move');
