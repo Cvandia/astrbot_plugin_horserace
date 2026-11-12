@@ -4,6 +4,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 
 from .service import RaceService
+from .dashboard_api import DashboardAPI
 
 
 class HorseRacePlugin(Star):
@@ -12,11 +13,13 @@ class HorseRacePlugin(Star):
         self.service = RaceService(
             config, StarTools.get_data_dir("astrbot_plugin_horserace"), self.text_to_image
         )
+        self.dashboard = DashboardAPI(context, self.service)
 
     async def initialize(self) -> None:
         await self.service.initialize()
 
     async def terminate(self) -> None:
+        self.dashboard.closed = True
         await self.service.terminate()
 
     @filter.command("赛马帮助")

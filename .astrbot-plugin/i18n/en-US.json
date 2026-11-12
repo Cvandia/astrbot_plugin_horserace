@@ -1,0 +1,8 @@
+{
+  "pages": {
+    "dashboard": {
+      "title": "Horse Racing",
+      "description": "Event editor and race testing"
+    }
+  }
+}

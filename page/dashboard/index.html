@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>赛马游戏 · 事件工作台</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#editor">赛马游戏</a>
+      <nav aria-label="工作台功能"><button class="nav active" data-tab="editor">事件编辑</button><button class="nav" data-tab="test">开发测试</button></nav>
+      <div class="sidebar-library"><label for="library">事件包</label><select id="library"><option value="">选择事件包…</option></select><button class="quiet" id="refreshLibrary">刷新</button><button id="deletePack" class="danger-text" disabled title="选择自定义事件包后可删除">删除事件包</button></div>
+      <div class="sidebar-note"><span class="dot" id="connectionDot"></span><span id="connection">正在连接…</span></div>
+    </aside>
+    <main>
+      <div class="pack-toolbar"><div class="pack-name"><label for="filename">文件名</label><input id="filename" value="我的赛马事件.json" maxlength="69" /><span id="draftState" class="tag">本地草稿</span></div><div class="toolbar-actions"><input id="importFile" type="file" accept=".json,application/json" hidden /><button id="importBtn">导入 JSON</button><button id="exportBtn">导出 JSON</button><button class="primary" id="saveBtn" disabled>保存到机器人</button></div></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="editorPanel" class="editor-grid">
+        <aside class="event-rail"><div class="section-title"><h2>事件列表 <span id="eventCount">0</span></h2><button class="icon-btn" id="newEvent" title="新增事件" aria-label="新增事件">＋</button></div><input id="eventSearch" class="search" placeholder="搜索事件名称…" aria-label="搜索事件" /><div id="eventList" class="event-list"></div><div class="rail-bottom"><button id="duplicateEvent">复制选中</button><button id="deleteEvent" class="danger-text">删除</button></div></aside>
+        <div class="block-editor-panel">
+          <div class="block-toolbar"><h2 id="editingTitle">编辑事件</h2><div class="toolbar-actions"><button id="undoBlocks">撤销</button><button id="redoBlocks">重做</button><button id="fitBlocks">整理视图</button><button id="validateBtn" class="primary">校验事件包</button></div></div>
+          <p class="hint block-help">从分类中拖入积木，接到事件内；buff 使用下拉选择。子事件与随机结果可嵌套。</p>
+          <div class="block-quick-add"><label for="blockType">快速添加</label><select id="blockType" aria-label="积木类型"></select><button id="addBlock">添加积木</button><span class="hint">嵌套积木先选中对应容器</span></div>
+          <div id="blocklyWorkspace" role="region" aria-label="赛马事件积木画布"></div>
+          <div id="validation" class="validation" role="status" aria-live="polite">等待校验</div>
+          <details id="sourceDetails" class="source-details"><summary>高级 JSON（可选）</summary><p class="hint">常用事件直接拼积木。灰色高级字段会原样保留；修改 JSON 后应用到积木。</p><textarea id="eventJson" spellcheck="false" aria-label="事件 JSON"></textarea><div class="toolbar-actions"><button id="formatJson">格式化</button><button id="applyJson">应用 JSON 到积木</button></div></details>
+        </div>
+        <aside id="aiPanel" class="ai-panel" hidden>
+          <div class="section-title"><h2>AI 事件助手</h2><button id="clearAI" class="quiet">新对话</button></div>
+          <p class="hint" id="aiModel">使用 AstrBot 默认模型</p>
+          <div id="aiMessages" class="ai-messages" role="log" aria-live="polite"><p class="hint">描述想生成的事件包，也可以继续修改上一版。</p></div>
+          <form id="aiForm"><label for="aiPrompt">一句话描述事件</label><textarea id="aiPrompt" rows="3" maxlength="2000" placeholder="描述事件、概率和效果…" required></textarea><button id="sendAI" type="submit" class="primary wide">发送</button></form>
+          <div id="aiCandidate" class="ai-candidate" hidden><h3>生成的事件包</h3><ul id="aiEventNames"></ul><label for="aiFilename">文件名</label><input id="aiFilename" value="AI生成事件.json" maxlength="69" /><div class="toolbar-actions"><button id="importAI">导入编辑器</button><button id="saveAI" class="primary">导入并保存</button></div></div>
+        </aside>
+      </section>
+
+      <section id="testPanel" class="test-grid" hidden>
+        <aside class="test-controls"><h2>测试设置</h2><p class="hint">独立试跑，不影响群内比赛。</p><label>测试模式<select id="testMode"><option value="selected">仅触发选中事件一次</option><option value="race">整个事件包随机比赛</option></select></label><label>发起马匹<select id="actor"></select></label><label>测试马匹<textarea id="players" rows="4" spellcheck="false">闪电|0
+赤兔|4
+青骓|2</textarea><small>每行填写 马名|初始位置，支持 2~8 匹。</small></label><div class="field-grid"><label>随机种子<input id="seed" type="number" value="42" min="0" max="4294967295" /></label><label>测试回合<input id="rounds" type="number" value="12" min="1" max="100" /></label><label>跑道长度<input id="length" type="number" value="20" min="15" max="100" /></label><label>事件概率 ‰<input id="eventRate" type="number" value="450" min="0" max="1000" /></label></div><label class="check-line"><input id="protectedActor" type="checkbox" /> 发起马匹携带不死图腾</label><button id="runTest" class="primary wide" disabled>开始测试</button><p class="hint">相同输入和种子可复现结果。</p></aside>
+        <div class="test-stage"><div class="section-title"><h2>赛道与回放</h2><span id="testResult" class="tag">等待试跑</span></div><div class="playback"><button id="prevFrame" aria-label="上一回合">←</button><button id="playFrames">播放</button><button id="nextFrame" aria-label="下一回合">→</button><input id="frameSlider" type="range" min="0" max="0" value="0" aria-label="回合进度" /><strong id="frameLabel">第 0 回合</strong></div><div id="tracks" class="tracks"><p class="empty">开始测试后显示赛况。</p></div><div class="log-heading"><h3>回合日志</h3></div><pre id="roundLog">尚未运行测试。</pre><button id="exportTest" disabled>导出测试记录</button></div>
+      </section>
+    </main>
+  </div>
+  <dialog id="confirmDialog"><form method="dialog"><h2 id="confirmTitle">确认操作</h2><p id="confirmText"></p><div class="toolbar-actions"><button value="cancel">取消</button><button value="ok" class="primary">确认</button></div></form></dialog>
+  <script src="./vendor/blockly/blockly_compressed.js" defer></script>
+  <script src="./vendor/blockly/msg/zh-hans.js" defer></script>
+  <script src="./vendor/blockly/multiline/index.js" defer></script>
+  <script src="./block-model.js" defer></script>
+  <script src="./block-editor.js" defer></script>
+  <script src="./ai-panel.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
