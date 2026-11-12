@@ -1,4 +1,4 @@
 {
-  "title": "赛马游戏",
-  "description": "事件可视化编辑与独立开发测试"
+  "title": {"i18n_key": "pages.dashboard.title"},
+  "description": {"i18n_key": "pages.dashboard.description"}
 }

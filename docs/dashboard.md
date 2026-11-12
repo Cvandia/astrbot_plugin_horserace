@@ -10,6 +10,8 @@
 python tools/build_dashboard.py
 ```
 
+当前 AstrBot 的侧边栏和页面标题通过 `.astrbot-plugin/i18n/zh-CN.json` 中的 `pages.dashboard.title` 显示为「赛马游戏」，`_page.json` 引用同一语言键。只填写元数据标题会回退为目录名 `dashboard`；更新语言文件后需重载插件并刷新管理面板。
+
 旧管理面板可能没有 Pages 支持。升级 AstrBot 后重载插件；若仍没有入口，检查该版本的插件页面支持。独立打开 `page/dashboard/index.html` 只提供离线编辑、结构检查和导入导出，保存与试跑需要 AstrBot 后端。
 
 ## 编写事件包

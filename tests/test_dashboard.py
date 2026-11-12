@@ -28,6 +28,12 @@ class DashboardCoreTests(unittest.TestCase):
             self.assertEqual((ROOT / "page/dashboard" / name).read_bytes(), (ROOT / "pages/dashboard" / name).read_bytes())
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
         self.assertIn("pages:\n  - name: dashboard\n    title: 赛马游戏", metadata)
+        # Current AstrBot uses this locale key for the sidebar and page title,
+        # regardless of metadata.pages.title or a literal _page.json title.
+        locale = json.loads((ROOT / ".astrbot-plugin/i18n/zh-CN.json").read_text(encoding="utf-8"))
+        self.assertEqual(locale["pages"]["dashboard"]["title"], "赛马游戏")
+        entry = json.loads((ROOT / "page/dashboard/_page.json").read_text(encoding="utf-8"))
+        self.assertEqual(entry["title"]["i18n_key"], "pages.dashboard.title")
 
     def test_simulation_is_reproducible_without_global_random_changes(self):
         before = random.getstate()

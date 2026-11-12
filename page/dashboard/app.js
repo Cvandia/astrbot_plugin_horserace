@@ -241,7 +241,7 @@
 
   async function loadLibrary() {
     const data = await api('packs'); library = data.packs || [];
-    $('library').replaceChildren(new Option('选择一个事件包…', ''));
+    $('library').replaceChildren(new Option('选择事件包…', ''));
     library.forEach((item, index) => $('library').append(new Option(`${item.source === 'builtin' ? '内置' : '自定义'} · ${item.filename}`, index)));
     if (data.errors?.length) notice('部分事件包未读取：\n' + data.errors.join('\n'), true);
   }
@@ -357,7 +357,7 @@
         await Promise.race([window.AstrBotPluginPage.ready(),new Promise((_,reject) => setTimeout(() => reject(new Error('bridge timeout')),7000))]);
       }
       online = true; await loadLibrary();
-      $('connection').textContent = 'AstrBot 已连接'; $('connectionDot').classList.add('online');
+      $('connection').textContent = '已连接'; $('connectionDot').classList.add('online');
       $('saveBtn').disabled = false; $('runTest').disabled = false;
     } catch {
       online = false; $('connection').textContent = '离线编辑模式';
