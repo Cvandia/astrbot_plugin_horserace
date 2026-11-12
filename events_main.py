@@ -2,7 +2,14 @@ import random
 from .horse import horse
 from astrbot.api import logger
 
+class SimulationLimitError(ValueError):
+    """Stop only the isolated developer simulation when its budget runs out."""
+
 def event_main(race, horse_i, event, event_delay_key = 0):
+    if getattr(race, "simulation_budget", None) is not None:
+        race.simulation_budget -= 1
+        if race.simulation_budget < 0:
+            raise SimulationLimitError("事件链过于复杂，已停止测试（最多 5000 次事件结算）")
     event_name = event.get("event_name", "未知事件")
     blocked_before = {id(h): h.blocked_effect_count for h in race.player}
     try:
@@ -38,7 +45,7 @@ def event_main(race, horse_i, event, event_delay_key = 0):
             # 1为随机选择一个非自己的目标（即<1>）
     #        targets.pop(horse_i)
             del targets[horse_i]
-            targets = random.sample(targets, 1)
+            targets = race.rng.sample(targets, 1)
             target_name_1 = race.player[targets[0]].horse_fullname
         elif target == 2:
             # 2为全部
@@ -50,13 +57,13 @@ def event_main(race, horse_i, event, event_delay_key = 0):
             target_name_1 = "其他所有马儿"
         elif target == 4:
             # 4为全场随机一个目标
-            targets = random.sample(targets, 1)
+            targets = race.rng.sample(targets, 1)
             target_name_1 = race.player[targets[0]].horse_fullname
         elif target == 5:
             # 5自己和一位其他目标（该目标为<1>）
     #        targets.pop(horse_i)
             del targets[horse_i]
-            a = random.sample(targets, 1)
+            a = race.rng.sample(targets, 1)
             targets = [horse_i]
             targets.extend(a)
             target_name_1 = race.player[a[0]].horse_fullname
@@ -73,7 +80,7 @@ def event_main(race, horse_i, event, event_delay_key = 0):
                 a.append(horse_i + 1)
             except:
                 pass
-            targets = random.sample(a, 1)
+            targets = race.rng.sample(a, 1)
             target_name_1 = race.player[targets[0]].horse_fullname
         elif target == 7:
             # 7为两侧赛道的马儿（即<1>，此<1>为马1和马2）,赛道最边上则结束事件链
@@ -152,7 +159,7 @@ def event_main(race, horse_i, event, event_delay_key = 0):
             random_event_once = event["random_event_once"]
             random_event_once_num = len(random_event_once)
             for i in targets:
-                random_event_once_rate = random.randint(0, random_event_once[random_event_once_num - 1][0])
+                random_event_once_rate = race.rng.randint(0, random_event_once[random_event_once_num - 1][0])
                 for j in range(0, random_event_once_num):
                     if random_event_once_rate <= random_event_once[j][0]:
                         event_once = random_event_once[j][1]
@@ -263,6 +270,8 @@ def event_main(race, horse_i, event, event_delay_key = 0):
         if protected:
             describe = f"{event_name}触发：{'、'.join(protected)}的不死图腾抵挡了负面效果，其他效果照常结算。"
         return describe
+    except SimulationLimitError:
+        raise
     except Exception:
         logger.exception(f"事件名 {event_name} 执行故障")
         return f"事件名 {event_name} 执行故障"
@@ -289,7 +298,7 @@ def event_track_to_location(race, targets, move_to):
 #移动对象至随机位置
 def event_track_random_location(race, targets):
     for i in targets:
-        move_to = random.randint(race.settings.setting_random_min_length, race.settings.setting_random_max_length)
+        move_to = race.rng.randint(race.settings.setting_random_min_length, race.settings.setting_random_max_length)
         race.player[i].location_move_to_event(move_to)
         logger.info(f'{race.player[i].horse} 移动到了随机位置{str(move_to)}')
 

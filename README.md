@@ -31,7 +31,7 @@ _⭐ 基于 AstrBot 的多人随机事件赛马小游戏 ⭐_
 > **该插件可能存在刷屏，请注意。** 比赛会逐回合播报赛况，建议在合适的群聊中使用，并按需调整回合间隔。
 
 > [!NOTE]
-> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。已通过 65 项本地测试，真实 AstrBot 群聊联调尚待完成。
+> 适用于 AstrBot **>=4.16,<5** 和 Python **>=3.10**。比赛数据保存在内存中，重载插件或重启后结束；没有积分、下注或金币系统。已通过 81 项本地测试，真实 AstrBot 群聊联调尚待完成。
 
 ## 📜 免责声明
 
@@ -66,6 +66,12 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 通过 AstrBot 管理面板重载插件。确保 `main.py`、`metadata.yaml` 直接位于 `data/plugins/astrbot_plugin_horserace/` 下。此插件无额外 Python 依赖。
 
 </details>
+
+## 🖥️ 图形化工作台
+
+在支持插件 Pages 的 AstrBot 管理面板中，打开本插件的 **赛马游戏** 页面，可视化编辑事件包、校验与导入导出 JSON，并通过真实引擎进行独立试跑和回合回放。保存后自动重载自定义事件；进行中的比赛保留原事件快照。
+
+页面源码位于 `page/dashboard/`，兼容运行入口位于 `pages/dashboard/`。使用方法、目录说明和开发验证见 [工作台文档](docs/dashboard.md)。旧版管理面板没有页面入口时，需升级至支持插件 Pages 的 AstrBot；直接打开 HTML 可离线编辑及导入导出。
 
 ## ⚙️ 配置
 

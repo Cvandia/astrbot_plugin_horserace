@@ -3,8 +3,9 @@ from .settings import Settings
 from .protection import is_negative_buff, positive_buff_parts
 
 class horse:
-    def __init__(self, horsename = "the_horse", uid = 114514, id = "the_player", location = 0, round = 0, settings=None ):
+    def __init__(self, horsename = "the_horse", uid = 114514, id = "the_player", location = 0, round = 0, settings=None, rng=None ):
         self.settings = settings or Settings()
+        self.rng = rng if rng is not None else random
         self.horse = horsename
         self.playeruid = uid
         self.player =  id
@@ -180,7 +181,7 @@ class horse:
             if self.buff[i][1] <= self.round:
                 move_min += self.buff[i][3]
                 move_max += self.buff[i][4]
-        return random.randint(move_min + self.settings.base_move_min, max(move_min + self.settings.base_move_min, move_max + self.settings.base_move_max))
+        return self.rng.randint(move_min + self.settings.base_move_min, max(move_min + self.settings.base_move_min, move_max + self.settings.base_move_max))
 #=====赛马玩家战况显示：
     def display(self):
         display = f""

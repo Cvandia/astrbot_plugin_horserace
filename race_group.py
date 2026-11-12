@@ -7,8 +7,9 @@ from .settings import Settings
 
 class race_group:
 #初始化
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, rng=None):
         self.settings = settings or Settings()
+        self.rng = rng if rng is not None else random
         self.player = []
         self.round = 0
         self.start = 0
@@ -21,7 +22,7 @@ class race_group:
     def add_player(self, horsename = "the_horse", uid = 114514, id = "the_player",location = 0, round = 0):
         if len(self.player) >= 32:
             return  # Bound event-spawned horses, independent of human signup slots.
-        self.player.append(horse(horsename, uid, id, location, round, self.settings))
+        self.player.append(horse(horsename, uid, id, location, round, self.settings, self.rng))
 #赛马位数量查看
     def query_of_player(self):
         return len(self.player)
@@ -85,7 +86,7 @@ class race_group:
                 if buff[1] <= self.round and buff[5]:
                     event_in_buff = buff[5]
                     event_in_buff_num = len(event_in_buff)
-                    event_in_buff_rate = random.randint(0, event_in_buff[event_in_buff_num - 1][0])
+                    event_in_buff_rate = self.rng.randint(0, event_in_buff[event_in_buff_num - 1][0])
                     for k in range(0, event_in_buff_num):
                         if event_in_buff_rate <= event_in_buff[k][0]:
                             event_in_buff_x = event_in_buff[k][1]
@@ -98,7 +99,7 @@ class race_group:
         if not events_num or self.settings.event_rate == 0:
             return event_display
         for i in range(0, len(self.player)):
-            event_id = random.randint(0, math.ceil(1000 * events_num / self.settings.event_rate) - 1)
+            event_id = self.rng.randint(0, math.ceil(1000 * events_num / self.settings.event_rate) - 1)
             if event_id < events_num:
                 event = events_list[event_id]
                 display_0 = event_main(self, i, event) + "\n"

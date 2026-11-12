@@ -1,7 +1,7 @@
 name: astrbot_plugin_horserace
 display_name: 赛马游戏
 desc: 多人赛马小游戏，支持随机事件、状态效果、自定义事件包和异步赛况播报。
-version: v1.1.1
+version: v1.2.0
 author: Cvandia
 repo: https://github.com/Cvandia/astrbot_plugin_horserace
 astrbot_version: ">=4.16,<5"
@@ -21,3 +21,6 @@ tags:
   - 游戏
   - 赛马
   - 多人
+pages:
+  - name: dashboard
+    title: 赛马游戏
