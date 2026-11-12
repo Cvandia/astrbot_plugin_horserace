@@ -27,6 +27,8 @@ _⭐ 基于 AstrBot 的多人随机事件赛马小游戏 ⭐_
 
 本插件由 [nonebot_plugin_horserace](https://github.com/shinianj/nonebot_plugin_horserace) 移植而来，使用 AstrBot 的平台无关消息接口和异步比赛任务。`main.py` 仅负责插件入口、生命周期和指令注册，业务逻辑独立拆分。
 
+**支持 AI 一句话生成事件包。**
+
 > [!WARNING]
 > **该插件可能存在刷屏，请注意。** 比赛会逐回合播报赛况，建议在合适的群聊中使用，并按需调整回合间隔。
 
