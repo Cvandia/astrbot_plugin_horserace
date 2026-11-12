@@ -24,8 +24,10 @@ def payload(**kwargs):
 
 class DashboardCoreTests(unittest.TestCase):
     def test_mirror_and_metadata_declaration(self):
-        for name in ("index.html", "app.js", "style.css", "_page.json"):
-            self.assertEqual((ROOT / "page/dashboard" / name).read_bytes(), (ROOT / "pages/dashboard" / name).read_bytes())
+        source = ROOT / "page/dashboard"
+        for path in source.rglob("*"):
+            if path.is_file():
+                self.assertEqual(path.read_bytes(), (ROOT / "pages/dashboard" / path.relative_to(source)).read_bytes())
         metadata = (ROOT / "metadata.yaml").read_text(encoding="utf-8")
         self.assertIn("pages:\n  - name: dashboard\n    title: 赛马游戏", metadata)
         # Current AstrBot uses this locale key for the sidebar and page title,

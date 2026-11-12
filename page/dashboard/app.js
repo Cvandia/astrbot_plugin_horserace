@@ -8,27 +8,8 @@
   let online = false, library = [], test = null, frameIndex = 0, playback = null;
   const draftKey = 'astrbot-horserace-event-studio-v1';
   const targets = ['自己','随机另一匹马','全场马匹','除自己外全部','全场随机一匹','自己和另一匹','随机相邻赛道','两侧赛道'];
-  const basics = [
-    ['event_name','事件名称','text'], ['target','作用目标','target'],
-    ['describe','消息描述','textarea'], ['race_only','本场唯一标识（可选）','text'],
-    ['target_is_buff','目标必须拥有标签','text'], ['target_no_buff','目标不能拥有标签','text'],
-  ];
-  const effects = [
-    ['move','额外位移（可为负）','number'], ['track_to_location','传送到位置','number'],
-    ['buff_time_add','状态时长增减','number'], ['del_buff','移除标签（英文逗号分隔）','tags'],
-    ['die_name','死亡状态显示名','text'], ['away_name','离场状态显示名','text'],
-  ];
-  const buffs = [
-    ['rounds','持续回合数','number'], ['name','状态名称','text'],
-    ['move_min','移动加成最小值','number'], ['move_max','移动加成最大值','number'],
-    ['other_buff','自定义状态标签','tags'],
-  ];
-  const flags = [
-    ['die','死亡'], ['away','下回合离场'], ['live','复活'],
-    ['negative_immunity','不死图腾保护'], ['immediate','死亡当回合生效'],
-    ['track_exchange_location','交换位置（目标 1 或 6）'], ['track_random_location','随机传送'],
-    ['locate_lock','停滞'], ['vertigo','眩晕'], ['hiding','隐藏位置'],
-  ];
+  let blockEditor = null, restoredBlocks = null;
+  const blockCatalog = () => window.HorseRaceBlockModel.catalog([pack, ...library.map(item => item.pack)]);
 
   function notice(message, error = false) {
     $('notice').textContent = String(message);
@@ -48,7 +29,7 @@
   }
 
   function saveDraft() {
-    try { localStorage.setItem(draftKey, JSON.stringify({pack, selected, filename:$('filename').value})); }
+    try { localStorage.setItem(draftKey, JSON.stringify({pack, selected, filename:$('filename').value, blocks:blockEditor?.getState()})); }
     catch { $('draftState').textContent = '浏览器草稿不可用'; }
   }
 
@@ -76,35 +57,6 @@
     return result?.status === 'ok' ? result.data : result;
   }
 
-  function field(parent, [key, label, type]) {
-    const wrapper = document.createElement('label');
-    if (type === 'textarea' || key === 'other_buff') wrapper.className = 'field-wide';
-    wrapper.textContent = label;
-    let input;
-    if (type === 'target') {
-      input = document.createElement('select');
-      targets.forEach((text, index) => { const o = document.createElement('option'); o.value = index; o.textContent = `${index} · ${text}`; input.append(o); });
-    } else {
-      input = document.createElement(type === 'textarea' ? 'textarea' : 'input');
-      if (type !== 'textarea') input.type = type === 'number' ? 'number' : 'text';
-      else input.rows = 3;
-      if (type === 'number') input.step = '1';
-    }
-    input.id = 'field-' + key;
-    const value = pack[selected]?.[key];
-    input.value = Array.isArray(value) && type === 'tags' ? value.join(', ') : (value ?? (type === 'target' ? 0 : ''));
-    input.addEventListener('input', () => {
-      const event = pack[selected];
-      if (input.value === '') delete event[key];
-      else if (type === 'number' || type === 'target') event[key] = Number(input.value);
-      else if (type === 'tags') event[key] = input.value.split(/[,，]/).map(v => v.trim()).filter(Boolean);
-      else event[key] = input.value;
-      syncSource(); changed(); renderList();
-      $('editingTitle').textContent = event.event_name || '未命名事件';
-    });
-    wrapper.append(input); parent.append(wrapper);
-  }
-
   function renderList() {
     $('eventCount').textContent = pack.length;
     $('eventList').replaceChildren();
@@ -125,83 +77,19 @@
   }
 
   function applyPending() {
-    if (!jsonDirty) return;
-    const event = JSON.parse($('eventJson').value);
-    if (!event || typeof event !== 'object' || Array.isArray(event)) throw new Error('当前事件 JSON 必须是一个对象');
-    pack[selected] = event; jsonDirty = false; changed();
+    if (jsonDirty) {
+      const event = JSON.parse($('eventJson').value);
+      basicValidate(event);
+      pack[selected] = event; jsonDirty = false;
+      blockEditor.setCatalog(blockCatalog()); blockEditor.load(event); changed();
+    } else pack[selected] = blockEditor.read();
   }
 
   function renderEditor() {
     renderList();
-    $('editingTitle').textContent = pack[selected]?.event_name || '未命名事件';
-    for (const [parent, fields] of [['basicFields', basics], ['effectFields', effects], ['buffFields', buffs]]) {
-      $(parent).replaceChildren(); fields.forEach(definition => field($(parent), definition));
-    }
-    $('flagFields').replaceChildren();
-    flags.forEach(([key, text]) => {
-      const label = document.createElement('label'); label.className = 'check-line';
-      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = pack[selected][key] === 1;
-      checkbox.addEventListener('change', () => { if (checkbox.checked) pack[selected][key] = 1; else delete pack[selected][key]; syncSource(); changed(); });
-      label.append(checkbox, document.createTextNode(text)); $('flagFields').append(label);
-    });
-    renderBranches(); syncSource();
-  }
-
-  function inferEffect(event) {
-    if (event.die) return 'die'; if (event.away) return 'away'; if (event.live) return 'live';
-    if (event.negative_immunity) return 'totem'; if (event.locate_lock) return 'stop';
-    if (event.move !== undefined) return 'move'; if (event.move_min !== undefined || event.move_max !== undefined) return 'speed';
-    return 'custom';
-  }
-
-  function renderBranches() {
-    const branches = pack[selected].random_event_once || [];
-    $('branches').replaceChildren();
-    if (!Array.isArray(branches)) {
-      const p = document.createElement('p'); p.textContent = '随机分支格式无效，请在 JSON 中修正。'; $('branches').append(p); return;
-    }
-    const options = {move:'额外位移',stop:'停留',speed:'持续加速',die:'死亡',away:'离场',live:'复活',totem:'图腾保护',custom:'高级 JSON 效果'};
-    let previous = -1;
-    branches.forEach((pair, index) => {
-      if (!Array.isArray(pair) || !pair[1] || typeof pair[1] !== 'object') return;
-      const weight = pair[0] - previous; previous = pair[0];
-      const child = pair[1], effect = inferEffect(child);
-      const row = document.createElement('div'); row.className = 'branch';
-      row.innerHTML = `<div class="branch-header"><strong>结果 ${index + 1}</strong><button class="remove">移除</button></div><div class="field-grid"><label>权重<input class="weight" type="number" min="1" max="10000" value="${esc(weight)}"></label><label>效果<select class="effect">${Object.entries(options).map(([v,t]) => `<option value="${v}" ${v === effect ? 'selected' : ''}>${t}</option>`).join('')}</select></label><label>数值 / 位移加成<input class="amount" type="number" value="${esc(child.move ?? child.move_min ?? 1)}"></label><label>持续回合<input class="duration" type="number" min="1" value="${esc(child.rounds ?? 1)}"></label><label class="field-wide">描述<input class="description" value="${esc(child.describe || '')}"></label></div>`;
-      const update = changeType => {
-        const items = [...$('branches').querySelectorAll('.branch')];
-        let threshold = -1;
-        const result = branches.map((old, i) => {
-          const item = items[i];
-          const w = Number(item.querySelector('.weight').value);
-          if (!Number.isInteger(w) || w < 1 || w > 10000) throw new Error('分支权重必须是 1~10000 的整数');
-          threshold += w;
-          let data = clone(old[1]);
-          const kind = item.querySelector('.effect').value;
-          if (changeType && i === index && kind !== 'custom') {
-            for (const key of ['move','move_min','move_max','rounds','name','locate_lock','vertigo','die','away','live','negative_immunity']) delete data[key];
-          }
-          data.target ??= 0;
-          data.describe = item.querySelector('.description').value;
-          const amount = Number(item.querySelector('.amount').value), duration = Number(item.querySelector('.duration').value);
-          if (kind === 'move') data.move = amount;
-          if (kind === 'stop' || kind === 'speed') { data.rounds = duration; data.name ||= kind === 'stop' ? '停留' : '加速'; }
-          if (kind === 'stop') data.locate_lock = 1;
-          if (kind === 'speed') data.move_min = data.move_max = amount;
-          if (['die','away','live'].includes(kind)) data[kind] = 1;
-          if (kind === 'totem') data.negative_immunity = 1;
-          return [threshold, data];
-        });
-        branches.splice(0, branches.length, ...result);
-        pack[selected].random_event_once = branches; syncSource(); changed();
-      };
-      row.querySelector('.remove').addEventListener('click', () => { const weights = branches.map((item, i) => item[0] - (i ? branches[i-1][0] : -1)); branches.splice(index,1); weights.splice(index,1); if (branches.length) {
-        let t = -1; pack[selected].random_event_once = branches.map((item, i) => { t += weights[i]; return [t,item[1]]; });
-      } else delete pack[selected].random_event_once; renderBranches(); syncSource(); changed(); });
-      row.querySelectorAll('input').forEach(input => input.addEventListener('input', () => safe(() => update(false))));
-      row.querySelector('.effect').addEventListener('change', () => safe(() => update(true)));
-      $('branches').append(row);
-    });
+    $('editingTitle').textContent = pack[selected]?.event_name || '编辑事件';
+    blockEditor.setCatalog(blockCatalog()); blockEditor.load(pack[selected]);
+    syncSource();
   }
 
   function basicValidate(value, depth = 0) {
@@ -243,6 +131,7 @@
     const data = await api('packs'); library = data.packs || [];
     $('library').replaceChildren(new Option('选择事件包…', ''));
     library.forEach((item, index) => $('library').append(new Option(`${item.source === 'builtin' ? '内置' : '自定义'} · ${item.filename}`, index)));
+    blockEditor?.setCatalog(blockCatalog());
     if (data.errors?.length) notice('部分事件包未读取：\n' + data.errors.join('\n'), true);
   }
 
@@ -250,6 +139,7 @@
     $('editorPanel').hidden = tab !== 'editor'; $('testPanel').hidden = tab !== 'test';
     document.querySelectorAll('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
     if (tab === 'test') refreshActors();
+    else requestAnimationFrame(() => blockEditor?.resize());
     if (tab !== 'test') stopPlayback();
   }
 
@@ -295,7 +185,6 @@
   $('newEvent').addEventListener('click', () => safe(() => { applyPending(); if (pack.length >= 128) throw new Error('最多 128 条事件'); pack.push(newEvent()); selected = pack.length - 1; renderEditor(); changed(); }));
   $('duplicateEvent').addEventListener('click', () => safe(() => { applyPending(); if (pack.length >= 128) throw new Error('最多 128 条事件'); const copy = clone(pack[selected]); copy.event_name = (copy.event_name || '事件') + ' · 副本'; pack.splice(selected+1,0,copy); selected++; renderEditor(); changed(); }));
   $('deleteEvent').addEventListener('click', () => safe(async () => { applyPending(); if (!await confirmAction('删除当前事件？','此操作只修改当前草稿。保存到机器人后才会更新事件包。')) return; pack.splice(selected,1); if (!pack.length) pack.push(newEvent()); selected = Math.min(selected,pack.length-1); renderEditor(); changed(); }));
-  $('addBranch').addEventListener('click', () => safe(() => { applyPending(); const rows = pack[selected].random_event_once ||= []; const last = rows.length ? rows.at(-1)[0] : -1; rows.push([last+50,{event_name:'随机结果',target:0,describe:'<0>额外前进3格！',move:3}]); $('branchDetails').open = true; renderBranches(); syncSource(); changed(); }));
   $('validateBtn').addEventListener('click', () => safe(validate));
   $('exportBtn').addEventListener('click', () => safe(async () => { await validate(); download(pack, $('filename').value || '赛马事件.json'); }));
   $('importBtn').addEventListener('click', () => $('importFile').click());
@@ -305,6 +194,7 @@
       if (file.size > 128*1024) throw new Error('导入文件不能超过 128KB');
       const value = JSON.parse((await file.text()).replace(/^\uFEFF/,''));
       if (!Array.isArray(value) || !value.length || value.length > 128 || !value.every(e => e && typeof e === 'object' && !Array.isArray(e))) throw new Error('导入内容必须是包含 1~128 个事件对象的数组');
+      value.forEach(event => { basicValidate(event); window.HorseRaceBlockModel.fromEvent(event); });
       if (dirty && !await confirmAction('替换当前草稿？','导入后会替换当前事件包，请先导出需要保留的内容。')) return;
       pack = value; selected = 0; $('filename').value = file.name; renderEditor(); changed(); notice(`已导入 ${pack.length} 条事件。`);
     } finally { $('importFile').value = ''; }
@@ -314,6 +204,7 @@
     const item = library[Number($('library').value)]; if ($('library').value === '' || !item) return;
     if (dirty && !await confirmAction('载入事件包？','当前草稿会被替换，请先导出需要保留的内容。')) return;
     if (!Array.isArray(item.pack) || !item.pack.length || item.pack.length > 128 || !item.pack.every(e => e && typeof e === 'object' && !Array.isArray(e))) throw new Error('此事件包需要包含 1~128 个事件对象');
+    item.pack.forEach(event => { basicValidate(event); window.HorseRaceBlockModel.fromEvent(event); });
     pack = clone(item.pack); selected = 0; $('filename').value = item.source === 'builtin' ? '我的-' + item.filename : item.filename;
     renderEditor(); dirty = false; $('draftState').textContent = item.source === 'builtin' ? '内置包的编辑副本' : '已载入'; saveDraft(); notice('已载入。修改后可保存到自定义事件目录。');
   }));
@@ -346,10 +237,30 @@
   try {
     const draft = JSON.parse(localStorage.getItem(draftKey) || 'null');
     if (draft && Array.isArray(draft.pack) && draft.pack.length > 0 && draft.pack.length <= 128 && draft.pack.every(e => e && typeof e === 'object' && !Array.isArray(e))) {
+      restoredBlocks = draft.blocks || null;
       pack = draft.pack; selected = Math.min(Math.max(0,Number(draft.selected)||0),pack.length-1); $('filename').value = draft.filename || '我的赛马事件.json';
     }
   } catch { /* Storage is optional. */ }
-  renderEditor(); refreshActors(); showTab(location.hash === '#test' ? 'test' : 'editor');
+  blockEditor = new window.HorseRaceBlockEditor({container:$('blocklyWorkspace'), onChange:(event,error) => {
+    if (error) {
+      $('validation').className='validation bad'; $('validation').textContent='✕ '+error.message;
+      dirty=true; $('draftState').textContent='积木尚未连接完整'; saveDraft(); return;
+    }
+    pack[selected]=event; syncSource(); changed(); renderList();
+    $('editingTitle').textContent=event.event_name || '编辑事件';
+    blockEditor.setCatalog(blockCatalog());
+  }});
+  for (const [type,label] of Object.entries(window.HorseRaceBlockEditor.types)) $('blockType').append(new Option(label,type));
+  $('addBlock').addEventListener('click', () => safe(() => blockEditor.add($('blockType').value)));
+  $('undoBlocks').addEventListener('click', () => blockEditor.undo());
+  $('redoBlocks').addEventListener('click', () => blockEditor.undo(true));
+  $('fitBlocks').addEventListener('click', () => blockEditor.fit());
+  renderEditor();
+  if (restoredBlocks) {
+    try { blockEditor.loadState(restoredBlocks); pack[selected]=blockEditor.read(); syncSource(); }
+    catch (error) { $('validation').className='validation bad'; $('validation').textContent='草稿：'+error.message; }
+  }
+  refreshActors(); showTab(location.hash === '#test' ? 'test' : 'editor');
   (async () => {
     try {
       if (!window.HorseRaceDev) {
