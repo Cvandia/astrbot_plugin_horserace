@@ -235,7 +235,9 @@ class RaceService:
                 elif race.round >= race.settings.max_rounds:
                     result = "已到回合上限，本场平局。"
                 else:
-                    await asyncio.sleep(race.settings.round_interval)
+                    # Allow time to read event narration, excluding track art.
+                    reading_delay = min(60.0, 1.5 + int(0.06 * len(text)))
+                    await asyncio.sleep(max(race.settings.round_interval, reading_delay))
                     continue
                 await event.send(event.plain_result(result))
                 break

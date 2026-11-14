@@ -47,7 +47,8 @@
   "round_interval": {
     "type": "float",
     "description": "回合间隔（秒）",
-    "default": 6.0
+    "default": 6.0,
+    "hint": "作为最短等待时间，长事件播报按文字长度自动延长，最长 60 秒。"
   },
   "max_rounds": {
     "type": "int",
