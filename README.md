@@ -69,39 +69,6 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 
 </details>
 
-## 🖥️ 图形化工作台
-
-在支持插件 Pages 的 AstrBot 管理面板中，打开本插件的 **赛马游戏** 页面，通过类似 Scratch 的积木拖拽、buff 下拉选择和嵌套组合编写事件。支持撤销重做、草稿恢复、校验与导入导出，并通过真实引擎独立试跑和回放。JSON 编辑保留为可选高级入口；保存后自动重载自定义事件，进行中的比赛保留原事件快照。
-
-页面源码位于 `page/dashboard/`，兼容运行入口位于 `pages/dashboard/`。使用方法、目录说明和开发验证见 [工作台文档](docs/dashboard.md)。旧版管理面板没有页面入口时，需升级至支持插件 Pages 的 AstrBot；直接打开 HTML 可离线编辑及导入导出。
-
-顶部可删除自定义事件包，内置包不能删除。删除后保留备份并重载，当前编辑草稿和进行中比赛的事件快照继续保留。
-
-在插件配置中开启 **使用内置 AI，一句话生成事件** 后，工作台旁显示 AI 对话。优先调用 **事件生成使用的模型** 中选择的 AstrBot 模型；留空使用 AstrBot 默认聊天模型，通过原生 `Context.llm_generate` 调用，无需额外填写密钥。可连续对话修改，生成后选择「导入编辑器」或「导入并保存」，不会自动覆盖文件。
-
-## ⚙️ 配置
-
-在 **AstrBot 管理面板 → 插件配置** 中修改。新比赛使用新配置，进行中的比赛保留创建时规则。
-
-| 基础配置 | 类型 | 默认值 | 说明 |
-| :--- | :---: | :---: | :--- |
-| `setting_track_length` | int | 20 | 跑道长度，5~100 |
-| `setting_random_min_length` | int | 0 | 随机传送最小位置 |
-| `setting_random_max_length` | int | 15 | 随机传送最大位置，不得超出跑道 |
-| `base_move_min` | int | 1 | 每回合基础移动最小值 |
-| `base_move_max` | int | 3 | 每回合基础移动最大值；移动范围 1~20 |
-| `min_player` | int | 2 | 手动及超时自动开赛的最少人数 |
-| `max_player` | int | 8 | 最多玩家数；人数范围 2~16 |
-| `setting_over_time` | int | 120 | 创建或最近一次开赛后，允许重置的等待秒数，10~3600 |
-| `event_rate` | int | 450 | 随机事件概率，千分比；0 关闭普通随机事件 |
-| `round_interval` | float | 6.0 | 回合播报后的等待秒数，1~60 |
-| `max_rounds` | int | 100 | 回合上限，1~500；仍无胜者则平局 |
-| `image_mode` | bool | false | 图片播报，依赖 AstrBot 文字转图片服务；失败回退文字 |
-| `enable_ai_event_generator` | bool | false | 开启工作台 AI 对话与事件生成 |
-| `ai_event_provider_id` | string | 空 | 从 AstrBot 模型列表选择，优先使用；空则用默认聊天模型 |
-
-最小值须不大于对应最大值；`min_player <= max_player`。默认文字播报无需图片渲染服务。
-
 ## 🚀 使用
 
 > [!NOTE]
@@ -126,6 +93,35 @@ git clone https://github.com/Cvandia/astrbot_plugin_horserace.git data/plugins/a
 同一平台实例下的同一群共享比赛，跨群、跨平台实例互相隔离。同回合到达终点者并列获胜。管理员指 AstrBot 管理员，群主/群管理身份不会自动获得插件管理权限。
 
 **报名超时自动处理：** 创建后开始计时，每次成功加入重新计时。尚未开赛且连续 **60 秒** 无人成功加入时，达到 `min_player` 门槛（默认 **2 人**）就自动开始比赛；人数不足才清空场地，并通知群聊。无效或重复报名、查询状态不刷新计时；已开赛和暂停中的比赛不受此规则影响。创建者没有报名也可以自动开赛，只要实际报名人数达标。
+
+## 🖥️ 图形化工作台
+
+打开本插件的 **赛马游戏** 页面，通过积木拖拽编写事件，支持 buff 选择、自定义事件包保存和独立试跑。内置事件包不能删除。
+
+在插件配置中开启 **使用内置 AI，一句话生成事件**，即可在页面旁对话生成事件包。具体操作见 [工作台使用说明](docs/dashboard.md)。
+
+## ⚙️ 配置
+
+在 **AstrBot 管理面板 → 插件配置** 中修改。新比赛使用新配置，进行中的比赛保留创建时规则。
+
+| 基础配置 | 类型 | 默认值 | 说明 |
+| :--- | :---: | :---: | :--- |
+| `setting_track_length` | int | 20 | 跑道长度，5~100 |
+| `setting_random_min_length` | int | 0 | 随机传送最小位置 |
+| `setting_random_max_length` | int | 15 | 随机传送最大位置，不得超出跑道 |
+| `base_move_min` | int | 1 | 每回合基础移动最小值 |
+| `base_move_max` | int | 3 | 每回合基础移动最大值；移动范围 1~20 |
+| `min_player` | int | 2 | 手动及超时自动开赛的最少人数 |
+| `max_player` | int | 8 | 最多玩家数；人数范围 2~16 |
+| `setting_over_time` | int | 120 | 创建或最近一次开赛后，允许重置的等待秒数，10~3600 |
+| `event_rate` | int | 450 | 随机事件概率，千分比；0 关闭普通随机事件 |
+| `round_interval` | float | 6.0 | 回合播报后的等待秒数，1~60 |
+| `max_rounds` | int | 100 | 回合上限，1~500；仍无胜者则平局 |
+| `image_mode` | bool | false | 图片播报，依赖 AstrBot 文字转图片服务；失败回退文字 |
+| `enable_ai_event_generator` | bool | false | 开启工作台 AI 对话与事件生成 |
+| `ai_event_provider_id` | string | 空 | 从 AstrBot 模型列表选择，优先使用；空则用默认聊天模型 |
+
+最小值须不大于对应最大值；`min_player <= max_player`。默认文字播报无需图片渲染服务。
 
 ## 🌙 Todo
 
