@@ -252,6 +252,60 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         await consume(self.service.join(Event(user="2", text="赛马加入 赤兔")))
         return self.service._room(self.owner)
 
+    async def test_round_wait_adapts_to_event_text_with_configured_floor_and_sixty_second_cap(self):
+        cases = [("", 1, 1.5), ("短消息", 6, 6), ("字" * 16, 1, 1.5), ("字" * 17, 1, 2.5),
+                 ("字" * 100, 6, 7.5), ("字" * 200, 6, 13.5), ("字" * 2000, 6, 60), ("字", 60, 60)]
+        for image in (False, True):
+            for text, minimum, expected in cases:
+                with self.subTest(image=image, length=len(text), minimum=minimum):
+                    room = await self.ready()
+                    await self.service._cancel_idle(room)
+                    room.race.settings = replace(room.race.settings, max_rounds=2, round_interval=minimum, image_mode=image)
+                    room.race.start = 1
+                    with patch.object(room.race, "event_start", return_value=text), patch.object(room.race, "move"), patch(
+                        f"{PKG}.service.asyncio.sleep", new=AsyncMock()
+                    ) as sleep:
+                        await self.service._run(self.owner, self.service._key(self.owner), room, self.service.events)
+                    sleep.assert_awaited_once_with(expected)
+                    self.assertNotIn(self.service._key(self.owner), self.service.rooms)
+
+    async def test_ending_race_never_waits_even_after_long_broadcast(self):
+        for ending in ("win", "all_dead", "round_limit"):
+            with self.subTest(ending=ending):
+                room = await self.ready()
+                await self.service._cancel_idle(room)
+                room.race.start = 1
+                with patch.object(room.race, "event_start", return_value="长事件" * 1000), patch.object(
+                    room.race, "is_win_all", return_value="\nalice" if ending == "win" else ""
+                ), patch.object(room.race, "is_die_all", return_value=ending == "all_dead"), patch(
+                    f"{PKG}.service.asyncio.sleep", new=AsyncMock()
+                ) as sleep:
+                    await self.service._run(self.owner, self.service._key(self.owner), room, self.service.events)
+                sleep.assert_not_awaited()
+                self.assertFalse(self.service.rooms)
+
+    async def test_pause_cancels_long_dynamic_wait_and_preserves_room(self):
+        room = await self.ready()
+        room.race.settings = replace(room.race.settings, max_rounds=100)
+        waiting = asyncio.Event()
+        release = asyncio.Event()
+
+        async def hold_wait(seconds):
+            self.assertEqual(seconds, 60)
+            waiting.set()
+            await release.wait()
+
+        with patch.object(room.race, "event_start", return_value="字" * 2000), patch.object(room.race, "move"), patch(
+            f"{PKG}.service.asyncio.sleep", side_effect=hold_wait
+        ):
+            await consume(self.service.start(self.owner))
+            task = room.task
+            await asyncio.wait_for(waiting.wait(), timeout=1)
+            await consume(self.service.pause(Event(admin=True)))
+        self.assertTrue(task.cancelled())
+        self.assertIs(self.service._room(self.owner), room)
+        self.assertEqual(room.race.start, 2)
+
     async def test_duplicate_join_and_full_name(self):
         room = await self.ready()
         self.assertEqual(room.race.player[0].horse, "白 色 闪电")
